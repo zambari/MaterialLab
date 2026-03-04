@@ -14,9 +14,14 @@ namespace MaterialLab.Editor
 	{
 		private readonly VisualElement content;
 
+		private readonly Label recognizedRolesLabel;
+
 		/// <inheritdoc />
 		public TextureCombinerTab() : base("Texture Combiner")
 		{
+			recognizedRolesLabel = new Label();
+			Add(recognizedRolesLabel);
+
 			content = new VisualElement();
 			Add(content);
 		}
@@ -32,6 +37,7 @@ namespace MaterialLab.Editor
 
 			if (Selection.activeObject is not Texture2D)
 			{
+				recognizedRolesLabel.text = "Recognized texture roles: None";
 				content.Add(new Label("No texture selected"));
 				return;
 			}
@@ -41,36 +47,24 @@ namespace MaterialLab.Editor
 						 .OfType<Texture2D>()
 						 .ToArray();
 
+			var matcher = new TextureAssetMatcher(selectedTextures);
+			var roles = matcher.GetRecognizedTextures();
+			recognizedRolesLabel.text = roles.Count > 0
+				? $"Recognized texture roles: {string.Join(", ", roles)}"
+				: "Recognized texture roles: None";
+
 			if (selectedTextures.Length == 2 || selectedTextures.Length == 3)
 			{
-				var sortedTexture = FindMetallicAndRougness(selectedTextures);
 				content.Add(
 					new MetallicGlossTextureCombiner(
-						sortedTexture.Item1,
-						sortedTexture.Item2,
-						sortedTexture.Item3));
+						matcher.Main,
+						matcher.Metallic,
+						matcher.Gloss));
 			}
 			else
 			{
 				content.Add(new Label("Select 2 or 3 textures for combiner options"));
 			}
-		}
-
-		/// <summary>
-		/// Returns main texture, metallic texture and gloss texture, based on names.
-		/// </summary>
-		private (Texture2D main, Texture2D metallic, Texture2D gloss) FindMetallicAndRougness(Texture2D[] textures)
-		{
-			var metallic = textures.FirstOrDefault(t => t != null && t.name.ToLower().Contains("metall"));
-			var roughness = textures.FirstOrDefault(
-				t =>
-					t != null &&
-					t != metallic &&
-					(t.name.ToLower().Contains("rough") ||
-					 t.name.ToLower().Contains("gloss")));
-			var main = textures.FirstOrDefault(t => t != null && t != metallic && t != roughness);
-
-			return (main, metallic, roughness);
 		}
 	}
 }
