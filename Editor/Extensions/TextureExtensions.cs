@@ -1,4 +1,4 @@
-﻿namespace MaterialLab.Editor
+namespace MaterialLab.Editor
 {
 	using UnityEditor;
 
@@ -25,26 +25,58 @@
 			return texture;
 		}
 
-		public static Texture2D EnsureReadableWarningModifiesAsset(this Texture2D texture)
+		// public static Texture2D EnsureReadableWarningModifiesAsset(this Texture2D texture)
+		// {
+		// 	if (texture == null) return null;
+		// 	if (texture.isReadable) return texture;
+
+		// 	var path = AssetDatabase.GetAssetPath(texture);
+		// 	if (string.IsNullOrEmpty(path)) return texture; // Runtime texture
+
+		// 	var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+		// 	if (importer == null) return texture; //null?
+
+		// 	bool wasReadable = importer.isReadable;
+
+		// 	if (!wasReadable)
+		// 	{
+		// 		importer.isReadable = true;
+		// 		importer.SaveAndReimport();
+		// 	}
+
+		// 	AssetDatabase.SaveAssets(); //?
+
+		// 	return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+		// }
+
+		/// <summary>
+		/// Ensures the imported texture asset is marked readable.
+		/// This modifies the asset on disk (import settings) and reloads it.
+		/// </summary>
+		public static Texture2D MakeReadableInPlace(this Texture2D texture)
 		{
 			if (texture == null) return null;
 			if (texture.isReadable) return texture;
 
 			var path = AssetDatabase.GetAssetPath(texture);
-			if (string.IsNullOrEmpty(path)) return texture; // Runtime texture
+			if (string.IsNullOrEmpty(path))
+			{
+				Debug.LogWarning($"[{nameof(TextureExtensions)}] Cannot make runtime texture readable in-place.");
+				return texture;
+			}
 
-			var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-			if (importer == null) return texture; //null?
+			if (AssetImporter.GetAtPath(path) is not TextureImporter importer)
+			{
+				Debug.LogWarning($"[{nameof(TextureExtensions)}] Failed to get TextureImporter for '{path}'.");
+				return texture;
+			}
 
-			bool wasReadable = importer.isReadable;
-
-			if (!wasReadable)
+			if (!importer.isReadable)
 			{
 				importer.isReadable = true;
 				importer.SaveAndReimport();
+				Debug.Log($"[{nameof(TextureExtensions)}] Marked '{path}' as Read/Write Enabled.");
 			}
-
-			AssetDatabase.SaveAssets(); //?
 
 			return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
 		}

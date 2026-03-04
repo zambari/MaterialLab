@@ -23,6 +23,8 @@ namespace MaterialLab.Editor
 
 		private Object originalSelected;
 
+		private const string ManualEditSuffix = "edit";
+
 		/// <inheritdoc />
 		public TextureEditTab() : base("Texture")
 		{
@@ -74,6 +76,81 @@ namespace MaterialLab.Editor
 				var optionSelect = new TextureOperationSelection();
 				content.Add(optionSelect);
 				optionSelect.actionRequested += operation => { PerformOperation(texture, operation); };
+
+				content.Add(new Separator());
+
+				var editToggle = new Toggle("Edit texture");
+				content.Add(editToggle);
+
+				var editArea = new VisualElement();
+				content.Add(editArea);
+
+				editToggle.RegisterValueChangedCallback(evt =>
+				{
+					editArea.Clear();
+					if (!evt.newValue) return;
+
+					var adjustElement = new TextureAdjustElement(texture, texture.name);
+					editArea.Add(adjustElement);
+
+					var buttonsRow = new VisualElement
+					{
+						style =
+						{
+							flexDirection = FlexDirection.Row,
+							marginTop = 4
+						}
+					};
+					buttonsRow.style.display = DisplayStyle.None;
+
+					var saveInPlace = new Button(
+						() =>
+						{
+							if (adjustElement == null) return;
+							SaveAdjustedTextureInPlace(texture, adjustElement.ProcessedTexture);
+						})
+					{
+						text = "Save in place", style = { width = elementWidth }
+					};
+
+					var saveAsNew = new Button(
+						() =>
+						{
+							if (adjustElement == null) return;
+							var resultTex = SaveAdjustedTextureAsNew(texture, adjustElement.ProcessedTexture);
+							if (resultTex != null)
+							{
+								resetCreatedOnSelectionChanged = false;
+								Selection.activeObject = resultTex;
+							}
+						})
+					{
+						text = "Save as new", style = { width = elementWidth }
+					};
+
+					var saveWithBackup = new Button(
+						() =>
+						{
+							if (adjustElement == null) return;
+							SaveAdjustedTextureWithBackup(texture, adjustElement.ProcessedTexture);
+						})
+					{
+						text = "Save with backup", style = { width = elementWidth }
+					};
+
+					buttonsRow.Add(saveInPlace);
+					buttonsRow.Add(saveAsNew);
+					buttonsRow.Add(saveWithBackup);
+					editArea.Add(buttonsRow);
+
+					adjustElement.OnUserChange += () =>
+					{
+						if (buttonsRow == null) return;
+						buttonsRow.style.display = adjustElement.HasUserChanges
+							? DisplayStyle.Flex
+							: DisplayStyle.None;
+					};
+				});
 			}
 			else
 			{
@@ -210,6 +287,81 @@ namespace MaterialLab.Editor
 					dir,
 					$"{Path.GetFileNameWithoutExtension(path)}_{op}{ext}");
 			}
+		}
+
+		private void SaveAdjustedTextureInPlace(Texture2D original, Texture2D adjusted)
+		{
+			if (original == null || adjusted == null) return;
+
+			var path = AssetDatabase.GetAssetPath(original);
+			if (string.IsNullOrEmpty(path))
+			{
+				Debug.LogWarning($"[{nameof(TextureEditTab)}] Cannot save in place, texture has no asset path.");
+				return;
+			}
+
+			var ext = Path.GetExtension(path).ToLowerInvariant();
+			byte[] bytes = ext == ".jpg" || ext == ".jpeg"
+				? adjusted.EncodeToJPG()
+				: adjusted.EncodeToPNG();
+
+			File.WriteAllBytes(path, bytes);
+			AssetDatabase.ImportAsset(path);
+			EditorUtility.SetDirty(original);
+			AssetDatabase.SaveAssets();
+			AssetDatabase.Refresh();
+		}
+
+		private Texture2D SaveAdjustedTextureAsNew(Texture2D original, Texture2D adjusted)
+		{
+			if (original == null || adjusted == null) return null;
+
+			var originalPath = AssetDatabase.GetAssetPath(original);
+			if (string.IsNullOrEmpty(originalPath))
+			{
+				Debug.LogWarning($"[{nameof(TextureEditTab)}] Cannot save as new, texture has no asset path.");
+				return null;
+			}
+
+			var timestamp = MaterialLabFileUtils.GetTimestampSuffix();
+			var suffix = $"{ManualEditSuffix}_{timestamp}";
+			var newPath = MaterialLabFileUtils.GetUniquePathWithSuffix(originalPath, suffix);
+
+			var ext = Path.GetExtension(newPath).ToLowerInvariant();
+			byte[] bytes = ext == ".jpg" || ext == ".jpeg"
+				? adjusted.EncodeToJPG()
+				: adjusted.EncodeToPNG();
+
+			File.WriteAllBytes(newPath, bytes);
+			createdFiles.Add(newPath);
+			createdFiles.Add(Path.ChangeExtension(newPath, ".meta"));
+			AssetDatabase.ImportAsset(newPath);
+
+			return AssetDatabase.LoadAssetAtPath<Texture2D>(newPath);
+		}
+
+		private void SaveAdjustedTextureWithBackup(Texture2D original, Texture2D adjusted)
+		{
+			if (original == null || adjusted == null) return;
+
+			var originalPath = AssetDatabase.GetAssetPath(original);
+			if (string.IsNullOrEmpty(originalPath))
+			{
+				Debug.LogWarning($"[{nameof(TextureEditTab)}] Cannot save with backup, texture has no asset path.");
+				return;
+			}
+
+			// Create backup next to original.
+			var backupSuffix = $"backup_{MaterialLabFileUtils.GetTimestampSuffix()}";
+			var backupPath = MaterialLabFileUtils.GetUniquePathWithSuffix(originalPath, backupSuffix);
+
+			File.Copy(originalPath, backupPath);
+			createdFiles.Add(backupPath);
+			createdFiles.Add(Path.ChangeExtension(backupPath, ".meta"));
+			AssetDatabase.ImportAsset(backupPath);
+
+			// Now overwrite original in place.
+			SaveAdjustedTextureInPlace(original, adjusted);
 		}
 	}
 }

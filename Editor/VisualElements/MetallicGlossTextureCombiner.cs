@@ -1,4 +1,4 @@
-﻿namespace MaterialLab.Editor
+namespace MaterialLab.Editor
 {
 	using System.IO;
 
@@ -13,27 +13,33 @@
 
 		private TextureAdjustElement glossAdjust;
 
-		public MetallicGlossTextureCombiner(Texture2D mainTexture, Texture2D metallic, Texture2D gloss)
+		public MetallicGlossTextureCombiner(TextureAssetMatcher matcher)
 		{
+			var mainTexture = matcher.Main;
+			var metallic = matcher.Metallic;
+			var roughness = matcher.Roughness;
+			var smoothness = matcher.Smoothness;
+			var smoothSource = smoothness ?? roughness;
+
 			var content = new VisualElement();
 			var texturePreviewRow = new VisualElement() { style = { flexDirection = FlexDirection.Row } };
 			texturePreviewRow.Add(GetPreviewWithLabel(mainTexture, "Main texture"));
 			texturePreviewRow.Add(GetPreviewWithLabel(metallic, "Metallic texture"));
-			texturePreviewRow.Add(GetPreviewWithLabel(gloss, "Gloss"));
+			texturePreviewRow.Add(GetPreviewWithLabel(smoothSource, smoothness != null ? "Smoothness" : "Roughness"));
 			texturePreviewRow.AddBorder();
 			metallicAdjust = new TextureAdjustElement(metallic, "Mettalic");
-			glossAdjust = new TextureAdjustElement(gloss, "Gloss");
+			glossAdjust = new TextureAdjustElement(smoothSource, smoothness != null ? "Smoothness" : "Roughness");
 
 			Add(texturePreviewRow);
 			Add(metallicAdjust);
 			Add(glossAdjust);
 			var addTimeStamp = new Toggle("Add TimeStamp") { value = true };
 			var swapAlphaColor = new Toggle("Swap alpha and color") { value = false };
-			if (metallic != null && gloss != null)
+			if (metallic != null && smoothSource != null)
 			{
-				if (metallic.width != gloss.width || metallic.height != gloss.height)
+				if (metallic.width != smoothSource.width || metallic.height != smoothSource.height)
 				{
-					Add(new Label("Error, metallic and gloss have different sizes"));
+					Add(new Label("Error, metallic and smooth/rough have different sizes"));
 				}
 				else
 				{
@@ -70,10 +76,8 @@
 				resultTexture.Apply();
 
 				var metallicPath = AssetDatabase.GetAssetPath(metallic);
-				var directory = Path.GetDirectoryName(metallicPath);
-				var fileName = Path.GetFileNameWithoutExtension(metallicPath);
-				var dateSuffix = addTimeStamp.value ? System.DateTime.Now.ToString("yyyyMMddHHmmss") : "combined";
-				var newPath = Path.Combine(directory, $"{fileName}_{dateSuffix}.png");
+				var suffix = addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined";
+				var newPath = MaterialLabFileUtils.GetUniquePathWithSuffix(metallicPath, suffix);
 
 				var bytes = resultTexture.EncodeToPNG();
 				File.WriteAllBytes(newPath, bytes);

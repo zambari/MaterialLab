@@ -10,7 +10,6 @@ namespace MaterialLab.Editor
 		Metallic,
 		Roughness,
 		Smoothness,
-		Gloss,
 		Specular,
 		Normal,
 		Height,

@@ -55,11 +55,7 @@ namespace MaterialLab.Editor
 
 			if (selectedTextures.Length == 2 || selectedTextures.Length == 3)
 			{
-				content.Add(
-					new MetallicGlossTextureCombiner(
-						matcher.Main,
-						matcher.Metallic,
-						matcher.Gloss));
+				content.Add(new MetallicGlossTextureCombiner(matcher));
 			}
 			else
 			{

@@ -1,6 +1,8 @@
-﻿namespace MaterialLab.Editor
+namespace MaterialLab.Editor
 {
 	using System;
+
+	using UnityEditor.UIElements;
 
 	using UnityEngine;
 	using UnityEngine.UIElements;
@@ -19,6 +21,11 @@
 
 		private Texture2D sourceTexture;
 
+		// Immutable snapshot of the source at the moment the editor UI is built.
+		// Used as the input for full-resolution processing so subsequent asset
+		// overwrites don't change the "original" we are adjusting from.
+		private Texture2D sourceSnapshotFull;
+
 		private Texture2D _texture;
 
 		private Texture2D sourceTexture_resized;
@@ -29,8 +36,33 @@
 
 		public Action OnTextureChange;
 
+		/// <summary>
+		/// Fired when the user changes any control (sliders, invert, curves, etc.)
+		/// or when values are reset to defaults.
+		/// </summary>
+		public Action OnUserChange;
+
 		private TexturePreview resultPreview;
 
+		private Image histogramImage;
+
+		private Toggle invertToggle;
+
+		private Toggle curvesToggle;
+
+		private CurveField curveField;
+
+		private float multiplierValue;
+
+		private float offsetValue;
+
+		private bool curveEnabled;
+
+		private AnimationCurve curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+
+		public bool HasUserChanges { get; private set; }
+
+		private bool suppressUserChangeNotification;
 		public Texture2D ProcessedTexture
 		{
 			get
@@ -40,7 +72,8 @@
 					_texture = new Texture2D(sourceTexture.width, sourceTexture.height);
 				}
 
-				ApplyModifications(sourceTexture, _texture);
+				var input = sourceSnapshotFull != null ? sourceSnapshotFull : sourceTexture;
+				ApplyModifications(input, _texture);
 
 				return _texture;
 			}
@@ -59,7 +92,12 @@
 			thisTarget.SetPixels(pixels);
 			thisTarget.Apply();
 		}
-
+		
+		/// <summary>
+		/// Clamps color. unused but do not remove.
+		/// </summary>
+		/// <param name="c"></param>
+		/// <returns></returns>
 		private Color ClampColor(Color c)
 		{
 			c.r = Mathf.Clamp(c.r, .2f, .6f);
@@ -72,40 +110,135 @@
 
 		protected virtual Color ProcessColor(Color c)
 		{
+			float ProcessChannel(float v)
+			{
+				float value = v * multiplierValue + offsetValue;
+
+				if (curveEnabled && curve != null)
+				{
+					value = curve.Evaluate(value);
+				}
+
+				if (invertToggle != null && invertToggle.value)
+				{
+					value = 1f - value;
+				}
+
+				return Mathf.Clamp01(value);
+			}
+
 			return new Color(
-				c.r * multiplierValue + offsetValue,
-				c.g * multiplierValue + offsetValue,
-				c.b * multiplierValue + offsetValue,
+				ProcessChannel(c.r),
+				ProcessChannel(c.g),
+				ProcessChannel(c.b),
 				c.a);
 		}
 
 		protected VisualElement GetControls(string id)
 		{
 			var controls = new VisualElement();
-			controls.style.minWidth = 100;
+			controls.style.minWidth = 200;
 			controls.style.marginLeft = 10;
 			controls.style.marginRight = 10;
-			multiplier = GetSavedSlider(id + "multiplier", -1.5f, 1.5f, 1);
-			offset = GetSavedSlider(id + "offset", -1.5f, 1.5f, 1);
-			multiplier.RegisterValueChangedCallback((x) => { multiplierValue = x.newValue; });
-			offset.RegisterValueChangedCallback((x) => { offsetValue = x.newValue; });
+			multiplier = GetSavedSlider(id + "multiplier", 0, 3f, 1);
+			offset = GetSavedSlider(id + "offset", -0.5f, 0.5f, 0);
+			// Initialize internal values from sliders so first repaint is correct.
+			multiplierValue = multiplier.value;
+			offsetValue = offset.value;
+			multiplier.RegisterValueChangedCallback(x =>
+			{
+				multiplierValue = x.newValue;
+				NotifyUserChange();
+				UpdateTexturePreview();
+			});
+			offset.RegisterValueChangedCallback(x =>
+			{
+				offsetValue = x.newValue;
+				NotifyUserChange();
+				UpdateTexturePreview();
+			});
 			controls.Add(new Label("Controls"));
 			controls.Add(new Label("multiplier"));
 			controls.Add(multiplier);
 			controls.Add(new Label("offset"));
 			controls.Add(offset);
 
+			invertToggle = new Toggle("Invert");
+			invertToggle.RegisterValueChangedCallback(_ =>
+			{
+				NotifyUserChange();
+				UpdateTexturePreview();
+			});
+			controls.Add(invertToggle);
+
+			curvesToggle = new Toggle("Enable curves");
+			curvesToggle.RegisterValueChangedCallback(evt =>
+			{
+				curveEnabled = evt.newValue;
+				if (curveField != null)
+				{
+					curveField.style.display = curveEnabled ? DisplayStyle.Flex : DisplayStyle.None;
+				}
+				NotifyUserChange();
+				UpdateTexturePreview();
+			});
+			controls.Add(curvesToggle);
+
+			curveField = new CurveField("Curve")
+			{
+				value = curve
+			};
+			curveField.style.display = DisplayStyle.None;
+			curveField.RegisterValueChangedCallback(evt =>
+			{
+				curve = evt.newValue ?? AnimationCurve.Linear(0f, 0f, 1f, 1f);
+				NotifyUserChange();
+				UpdateTexturePreview();
+			});
+			controls.Add(curveField);
+
+			var resetButton = new Button(
+				() =>
+				{
+					suppressUserChangeNotification = true;
+					multiplier.value = 1f;
+					offset.value = 0f;
+					if (invertToggle != null) invertToggle.value = false;
+					if (curvesToggle != null) curvesToggle.value = false;
+					curveEnabled = false;
+					curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+					if (curveField != null) curveField.value = curve;
+					suppressUserChangeNotification = false;
+					HasUserChanges = false;
+					OnUserChange?.Invoke();
+					UpdateTexturePreview();
+				})
+			{
+				text = "Reset"
+			};
+			resetButton.style.marginTop = 4;
+			controls.Add(resetButton);
+
 			return controls;
 		}
 
-		private float multiplierValue;
-
-		private float offsetValue;
+	
 
 		private void UpdateTexturePreview()
 		{
 			ApplyModifications(sourceTexture_resized, _texture_resized);
 			resultPreview.Texture = _texture_resized;
+
+			if (textureData != null && histogramImage != null)
+			{
+				var processedPreview = _texture_resized.GetPixels();
+				var previewColors = textureData.ColorsPreview;
+				var count = Mathf.Min(processedPreview.Length, previewColors.Length);
+				Array.Copy(processedPreview, previewColors, count);
+				textureData.RepaintHistogram();
+				histogramImage.image = textureData.HistogramTexture;
+			}
+
 			OnTextureChange?.Invoke();
 		}
 
@@ -114,32 +247,83 @@
 			this.AddBorder();
 			if (texture == null)
 			{
-				Add(new Label($"No texture selected"));
+				Add(new Label("No texture selected"));
+				return;
 			}
-			else
+
+			Add(new Label($"Edit {name}"));
+			if (!texture.isReadable)
 			{
-				Add(new Label($"Edit {name}"));
-				if (!texture.isReadable)
+				var readableRow = new Row();
+				readableRow.Add(new Label("Error, texture is not readable. Enable Read/Write or click Fix."));
+
+				var fixButton = new Button(
+					() =>
+					{
+						var fixedTexture = texture.MakeReadableInPlace();
+						if (fixedTexture == null || !fixedTexture.isReadable)
+						{
+							Debug.LogWarning($"[{nameof(TextureAdjustElement)}] Failed to make texture readable: {texture?.name}");
+							return;
+						}
+
+						Clear();
+						this.AddBorder();
+						BuildUIForTexture(fixedTexture, name);
+					})
 				{
-					Add(new Label($"Error, texture is not readable, please mark"));
-					return;
-				}
+					text = "Fix"
+				};
 
-				sourceTexture = texture; //.EnsureReadableWarningModifiesAsset();
-				textureData = new TextureDataWrapper(sourceTexture);
-				sourceTexture_resized = textureData.PreviewTexture;
-				_texture = new Texture2D(sourceTexture.width, sourceTexture.height);
-				_texture_resized = new Texture2D(sourceTexture_resized.width, sourceTexture_resized.height);
-
-				var row = new VisualElement() { style = { flexDirection = FlexDirection.Row } };
-				row.style.flexGrow = 0;
-				row.Add(new TexturePreview(texture));
-				row.Add(GetControls(name));
-				resultPreview = new TexturePreview(texture);
-				row.Add(resultPreview);
-				Add(row);
-				UpdateTexturePreview();
+				readableRow.Add(fixButton);
+				Add(readableRow);
+				return;
 			}
+
+			BuildUIForTexture(texture, name);
+		}
+
+		private void BuildUIForTexture(Texture2D texture, string name)
+		{
+			sourceTexture = texture;
+			// Take a decoupled full-resolution snapshot as our immutable "input".
+			sourceSnapshotFull = new Texture2D(sourceTexture.width, sourceTexture.height, TextureFormat.RGBA32, false);
+			sourceSnapshotFull.SetPixels(sourceTexture.GetPixels());
+			sourceSnapshotFull.Apply();
+
+			textureData = new TextureDataWrapper(sourceTexture);
+			sourceTexture_resized = textureData.PreviewTexture;
+			_texture = new Texture2D(sourceTexture.width, sourceTexture.height);
+			_texture_resized = new Texture2D(sourceTexture_resized.width, sourceTexture_resized.height);
+
+			var row = new VisualElement() { style = { flexDirection = FlexDirection.Row } };
+			row.style.flexGrow = 0;
+
+			var originalColumn = new VisualElement();
+			originalColumn.Add(new TexturePreview(texture));
+			row.Add(originalColumn);
+
+			var controlsColumn = GetControls(name);
+			row.Add(controlsColumn);
+
+			var previewColumn = new VisualElement();
+			resultPreview = new TexturePreview(texture);
+			previewColumn.Add(resultPreview);
+
+			histogramImage = new Image();
+			histogramImage.style.width = 160;
+			histogramImage.style.height = 40;
+			histogramImage.scaleMode = ScaleMode.StretchToFill;
+			previewColumn.Add(new Label("Histogram"));
+			previewColumn.Add(histogramImage);
+
+			row.Add(previewColumn);
+
+			Add(row);
+
+			textureData.RepaintHistogram();
+			histogramImage.image = textureData.HistogramTexture;
+			UpdateTexturePreview();
 		}
 
 		private Slider GetSavedSlider(string id, float lowValue, float highValue, float defaultValue)
@@ -150,9 +334,15 @@
 			slider.RegisterValueChangedCallback(x =>
 												{
 													PlayerPrefs.SetFloat(prefPrefix + id, x.newValue);
-													UpdateTexturePreview();
 												});
 			return slider;
+		}
+
+		private void NotifyUserChange()
+		{
+			if (suppressUserChangeNotification) return;
+			HasUserChanges = true;
+			OnUserChange?.Invoke();
 		}
 	}
 }

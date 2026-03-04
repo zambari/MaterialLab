@@ -10,6 +10,13 @@ namespace MaterialLab.Editor
 		Alpha
 	}
 
+	/// <summary>
+	/// Wraps a source texture with:
+	/// - a low resolution preview (averaged blocks of pixels)
+	/// - a histogram texture built from that preview.
+	/// Used by editor elements (e.g. TextureAdjustElement) to preview and
+	/// analyze textures without touching full resolution data every frame.
+	/// </summary>
 	public class TextureDataWrapper
 	{
 		private const int PreferredMinPreviewSize = 128;
@@ -32,6 +39,8 @@ namespace MaterialLab.Editor
 		private int histogramBucketSize = 256;
 		private int histogramHeight = 64;
 		private float histogramMultiplier = 1f;
+		private bool useNonLinearHistogramScaling = true;
+		private float histogramNonLinearStrength = 1f;
 		private Color histogramSampleColor = Color.white;
 		private Color histogramBackgroundColor = Color.black;
 		private HistogramValueType histogramValueType = HistogramValueType.AverageRgb;
@@ -53,8 +62,16 @@ namespace MaterialLab.Editor
 			(previewHeight, blockHeight) = CalculatePreviewDimension(this.source.height);
 		}
 
+		/// <summary>
+		/// Full resolution source colors (lazy loaded).
+		/// </summary>
 		public Color[] ColorsSource => colorsSource ??= source.GetPixels();
 
+		/// <summary>
+		/// Downsampled preview colors.
+		/// External code may overwrite this array (and then call RepaintHistogram)
+		/// to visualize histograms of processed preview data.
+		/// </summary>
 		public Color[] ColorsPreview
 		{
 			get
@@ -68,6 +85,9 @@ namespace MaterialLab.Editor
 			}
 		}
 
+		/// <summary>
+		/// Low resolution preview texture built from ColorsPreview.
+		/// </summary>
 		public Texture2D PreviewTexture
 		{
 			get
@@ -83,6 +103,10 @@ namespace MaterialLab.Editor
 			}
 		}
 
+		/// <summary>
+		/// Texture reused for histogram drawing. Call RepaintHistogram
+		/// after modifying ColorsPreview to update its contents.
+		/// </summary>
 		public Texture2D HistogramTexture
 		{
 			get
@@ -96,6 +120,9 @@ namespace MaterialLab.Editor
 			}
 		}
 
+		/// <summary>
+		/// Computes histogram bucket counts for the current preview colors.
+		/// </summary>
 		public int[] GetHistogram(int bucketSize, HistogramValueType valueType)
 		{
 			if (bucketSize <= 0)
@@ -131,10 +158,22 @@ namespace MaterialLab.Editor
 			return counts;
 		}
 
+		/// <summary>
+		/// Rebuilds the histogram texture from current ColorsPreview data and settings.
+		/// </summary>
 		public void RepaintHistogram()
 		{
 			var counts = GetHistogram(histogramBucketSize, histogramValueType);
 			int width = Mathf.Max(1, counts.Length);
+			int maxCount = 0;
+			for (int i = 0; i < width; i++)
+			{
+				if (counts[i] > maxCount)
+				{
+					maxCount = counts[i];
+				}
+			}
+
 			if (histogramTexture == null
 				|| histogramTexture.width != width
 				|| histogramTexture.height != histogramHeight)
@@ -150,7 +189,18 @@ namespace MaterialLab.Editor
 
 			for (int x = 0; x < width; x++)
 			{
-				int barHeight = Mathf.Clamp(Mathf.RoundToInt(counts[x] * histogramMultiplier), 0, histogramHeight);
+				int barHeight;
+				if (!useNonLinearHistogramScaling)
+				{
+					barHeight = Mathf.Clamp(Mathf.RoundToInt(counts[x] * histogramMultiplier), 0, histogramHeight);
+				}
+				else
+				{
+					float normalized = maxCount > 0 ? (float)counts[x] / maxCount : 0f;
+					float curved = ApplyNonLinearHistogramCurve(normalized);
+					barHeight = Mathf.Clamp(Mathf.RoundToInt(curved * histogramMultiplier * histogramHeight), 0, histogramHeight);
+				}
+
 				for (int y = 0; y < barHeight; y++)
 				{
 					pixels[y * width + x] = histogramSampleColor;
@@ -165,6 +215,30 @@ namespace MaterialLab.Editor
 		{
 			int width = Mathf.Max(1, histogramBucketSize);
 			return new Texture2D(width, histogramHeight, TextureFormat.RGBA32, false);
+		}
+
+		/// <summary>
+		/// Applies a non-linear curve to a normalized histogram value in [0,1].
+		/// Low values are preserved while higher values are progressively
+		/// compressed, so large peaks do not dominate the display.
+		/// </summary>
+		/// <param name="normalizedValue">Histogram bucket value normalized to [0,1].</param>
+		/// <returns>Curved value in [0,1].</returns>
+		private float ApplyNonLinearHistogramCurve(float normalizedValue)
+		{
+			normalizedValue = Mathf.Clamp01(normalizedValue);
+
+			// f(v) = log(1 + k * v) / log(1 + k)
+			// k controls how aggressively we compress high values.
+			// k -> 0 approximates linear; larger k increases compression.
+			float k = Mathf.Max(0.01f, histogramNonLinearStrength);
+			float denom = Mathf.Log(1f + k);
+			if (denom <= 0f)
+			{
+				return normalizedValue;
+			}
+
+			return Mathf.Log(1f + k * normalizedValue) / denom;
 		}
 
 

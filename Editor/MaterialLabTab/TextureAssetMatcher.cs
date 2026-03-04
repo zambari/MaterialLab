@@ -10,7 +10,7 @@ namespace MaterialLab.Editor
 	/// Utility for matching a set of textures to common PBR texture roles based on name patterns.
 	/// Designed for "in the wild" naming from DCCs, scan libraries, etc.
 	/// </summary>
-	internal readonly struct TextureAssetMatcher
+	public readonly struct TextureAssetMatcher
 	{
 		public Texture2D Main { get; }
 
@@ -22,8 +22,6 @@ namespace MaterialLab.Editor
 
 		public Texture2D Smoothness { get; }
 
-		public Texture2D Gloss { get; }
-
 		public Texture2D Specular { get; }
 
 		public Texture2D Normal { get; }
@@ -34,6 +32,10 @@ namespace MaterialLab.Editor
 
 		public Texture2D Emission { get; }
 
+		/// <summary>
+		/// Builds a matcher from a set of loose textures, using filename heuristics
+		/// to guess their roles.
+		/// </summary>
 		public TextureAssetMatcher(IEnumerable<Texture2D> textures)
 		{
 			var list = textures?
@@ -100,21 +102,17 @@ namespace MaterialLab.Editor
 					n.EndsWith("_r") ||
 					n.EndsWith("-r"));
 
+			// Smoothness: native smoothness names OR gloss-style names.
 			var smoothness = FindAndRemove(
 				n =>
 					n.Contains("smoothness") ||
 					n.Contains("smooth") ||
 					n.Contains("smo") ||
 					n.EndsWith("_s") ||
-					n.EndsWith("-s"));
-
-			// Prefer explicit "gloss" / "glossiness"; specular is its own role.
-			var gloss = FindAndRemove(n =>
-										 ContainsAny(
-											 n,
-											 "glossiness",
-											 "gloss",
-											 "gls"));
+					n.EndsWith("-s") ||
+					n.Contains("glossiness") ||
+					n.Contains("gloss") ||
+					n.Contains("gls"));
 
 			var specular = FindAndRemove(n =>
 											 ContainsAny(
@@ -192,7 +190,6 @@ namespace MaterialLab.Editor
 							   return t != metallic &&
 									  t != roughness &&
 									  t != smoothness &&
-									  t != gloss &&
 									  t != specular &&
 									  t != normal &&
 									  t != height &&
@@ -207,7 +204,60 @@ namespace MaterialLab.Editor
 			Metallic = metallic;
 			Roughness = roughness;
 			Smoothness = smoothness;
-			Gloss = gloss;
+			Specular = specular;
+			Normal = normal;
+			Height = height;
+			Occlusion = occlusion;
+			Emission = emission;
+		}
+
+		/// <summary>
+		/// Builds a matcher from a material, using shader property names to infer roles.
+		/// This is deterministic and does not rely on filename patterns.
+		/// </summary>
+		public TextureAssetMatcher(Material material)
+		{
+			if (material == null)
+			{
+				Main = null;
+				Albedo = null;
+				Metallic = null;
+				Roughness = null;
+				Smoothness = null;
+				Specular = null;
+				Normal = null;
+				Height = null;
+				Occlusion = null;
+				Emission = null;
+				return;
+			}
+
+			Texture2D GetTex(string prop)
+			{
+				if (!material.HasProperty(prop)) return null;
+				return material.GetTexture(prop) as Texture2D;
+			}
+
+			var albedo = GetTex("_BaseMap") ?? GetTex("_MainTex");
+			var metallic = GetTex("_MetallicGlossMap") ?? GetTex("_MetallicMap");
+			var normal = GetTex("_BumpMap");
+			var height = GetTex("_ParallaxMap");
+			var occlusion = GetTex("_OcclusionMap");
+			var emission = GetTex("_EmissionMap");
+
+			// Many shaders don't expose roughness/smoothness/specular as separate textures,
+			// so we only assign them when we find explicit maps.
+			Texture2D specular = GetTex("_SpecGlossMap");
+			Texture2D smoothness = null; // could be derived from metallic alpha etc., but we keep it simple for now.
+			Texture2D roughness = null;
+
+			var main = albedo ?? GetTex("_MainTex") ?? GetTex("_BaseMap");
+
+			Main = main;
+			Albedo = albedo;
+			Metallic = metallic;
+			Roughness = roughness;
+			Smoothness = smoothness;
 			Specular = specular;
 			Normal = normal;
 			Height = height;
@@ -224,7 +274,6 @@ namespace MaterialLab.Editor
 				TextureRole.Metallic => Metallic,
 				TextureRole.Roughness => Roughness,
 				TextureRole.Smoothness => Smoothness,
-				TextureRole.Gloss => Gloss,
 				TextureRole.Specular => Specular,
 				TextureRole.Normal => Normal,
 				TextureRole.Height => Height,
@@ -248,7 +297,6 @@ namespace MaterialLab.Editor
 			AddIfNotNull(TextureRole.Metallic, Metallic);
 			AddIfNotNull(TextureRole.Roughness, Roughness);
 			AddIfNotNull(TextureRole.Smoothness, Smoothness);
-			AddIfNotNull(TextureRole.Gloss, Gloss);
 			AddIfNotNull(TextureRole.Specular, Specular);
 			AddIfNotNull(TextureRole.Normal, Normal);
 			AddIfNotNull(TextureRole.Height, Height);
