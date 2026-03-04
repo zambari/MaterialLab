@@ -1,4 +1,4 @@
-﻿namespace MaterialLab.Editor
+﻿namespace MaterialLab.UIExtensions
 {
 
 	using System;
@@ -9,6 +9,7 @@
 	/// <summary>
 	/// UI Extensions
 	/// v.2. Made generic and added some extra methods
+	/// This class gets copied around A LOT, sorry.
 	/// </summary>
 	public static class UIExtensions
 	{

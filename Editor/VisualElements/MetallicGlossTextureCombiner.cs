@@ -21,14 +21,13 @@ namespace MaterialLab.Editor
 			var smoothness = matcher.Smoothness;
 			var smoothSource = smoothness ?? roughness;
 
-			var content = new VisualElement();
 			var texturePreviewRow = new VisualElement() { style = { flexDirection = FlexDirection.Row } };
 			texturePreviewRow.Add(GetPreviewWithLabel(mainTexture, "Main texture"));
 			texturePreviewRow.Add(GetPreviewWithLabel(metallic, "Metallic texture"));
 			texturePreviewRow.Add(GetPreviewWithLabel(smoothSource, smoothness != null ? "Smoothness" : "Roughness"));
 			texturePreviewRow.AddBorder();
-			metallicAdjust = new TextureAdjustElement(metallic, "Mettalic");
-			glossAdjust = new TextureAdjustElement(smoothSource, smoothness != null ? "Smoothness" : "Roughness");
+			metallicAdjust = new TextureAdjustElement(metallic, "Metallic (RGB):");
+			glossAdjust = new TextureAdjustElement(smoothSource, "Smoothness (Alpha):");
 
 			Add(texturePreviewRow);
 			Add(metallicAdjust);
@@ -43,7 +42,7 @@ namespace MaterialLab.Editor
 				}
 				else
 				{
-					Add(new Button(GetCombinedGlossMetallic) { text = "Save combined gloss and metallic" });
+					Add(new Button(GetCombinedGlossMetallic) { text = "Save combined gloss (alpha) and metallic" });
 					Add(addTimeStamp);
 				}
 			}
@@ -84,8 +83,12 @@ namespace MaterialLab.Editor
 				AssetDatabase.Refresh();
 
 				var asset = AssetDatabase.LoadAssetAtPath<Texture2D>(newPath);
-				EditorGUIUtility.PingObject(asset);
-				Debug.Log($"[{nameof(MetallicGlossTextureCombiner)}] Saved combined texture to {newPath}");
+				if (asset != null)
+				{
+					EditorGUIUtility.PingObject(asset);
+					Selection.activeObject = asset;
+				}
+				Debug.Log($"[{nameof(MetallicGlossTextureCombiner)}] Saved combined texture with smoothness as alpha to {newPath}");
 			}
 		}
 

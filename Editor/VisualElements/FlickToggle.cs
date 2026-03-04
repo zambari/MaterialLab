@@ -1,6 +1,9 @@
 namespace MaterialLab.Editor
 {
 	using System;
+
+	using MaterialLab.UIExtensions;
+
 	using UnityEngine;
 	using UnityEngine.UIElements;
 

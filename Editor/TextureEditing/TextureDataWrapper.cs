@@ -228,6 +228,15 @@ namespace MaterialLab.Editor
 		{
 			normalizedValue = Mathf.Clamp01(normalizedValue);
 
+			// First gently "lift" low values with a gamma-like curve so that
+			// near-zero buckets become more visible, while keeping 0 mapped to 0.
+			const float lowValueBoost = 2f; // >1 boosts shadows
+			if (normalizedValue > 0f)
+			{
+				normalizedValue = Mathf.Pow(normalizedValue, 1f / lowValueBoost);
+			}
+
+			// Then compress high values so large peaks do not dominate:
 			// f(v) = log(1 + k * v) / log(1 + k)
 			// k controls how aggressively we compress high values.
 			// k -> 0 approximates linear; larger k increases compression.

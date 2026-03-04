@@ -3,6 +3,7 @@
 	using System;
 
 	using MaterialLab.Tabs;
+	using MaterialLab.UIExtensions;
 
 	using UnityEditor;
 

@@ -46,7 +46,8 @@ namespace MaterialLab.Editor
 
 			if (selectedTextures.Length == 0 && selectedMaterials.Length == 0)
 			{
-				content.Add(new Label("Select textures and/or a material to inspect or create a new material."));
+				content.Add(
+					new LabelInfo("Select textures and/or a material\nto create a new material or compare textures"));
 				return;
 			}
 
@@ -56,24 +57,45 @@ namespace MaterialLab.Editor
 			if (selectedTextures.Length > 0)
 			{
 				var texturesSection = new VisualElement();
-				texturesSection.Add(new Label("From selected textures") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
+				texturesSection.Add(
+					new Label("From selected textures") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
 
 				var matcher = new TextureAssetMatcher(selectedTextures);
 				texturesSection.Add(new MaterialFromTexturesPreviewElement(matcher));
 				texturesSection.Add(new Separator());
 
-				var nameField = new TextField("Material name") { value = "Material" };
-				nameField.style.marginBottom = 4;
+				var nameFromMainTextureToggle = new Toggle("Name from main texture") { value = true };
+
+				var defaultName = GetDefaultMaterialName(matcher, selectedTextures);
+				var nameField = new TextField("Material name")
+				{
+					value = nameFromMainTextureToggle.value ? defaultName : "Material",
+					style = { marginBottom = 10, marginTop = 10 }
+				};
 				texturesSection.Add(nameField);
 
-				var createButton = new Button(
-					() =>
-					{
-						CreateMaterialFromMatcher(matcher, selectedTextures, nameField.value);
-					})
-				{
-					text = "Create new material"
-				};
+				nameFromMainTextureToggle.RegisterValueChangedCallback(evt =>
+																	   {
+																		   nameField.value =
+																			   evt.newValue
+																				   ? GetDefaultMaterialName(
+																					   matcher,
+																					   selectedTextures)
+																				   : "Material";
+																	   });
+
+				var addTimestampToggle = new Toggle("Add Timestamp") { value = true };
+				texturesSection.Add(addTimestampToggle);
+				texturesSection.Add(nameFromMainTextureToggle);
+
+				var createButton = new Button(() =>
+											  {
+												  CreateMaterialFromMatcher(
+													  matcher,
+													  selectedTextures,
+													  nameField.value,
+													  addTimestampToggle.value);
+											  }) { text = "Create new material" };
 				texturesSection.Add(createButton);
 
 				content.Add(texturesSection);
@@ -86,17 +108,13 @@ namespace MaterialLab.Editor
 				if (hasAnySection) content.Add(new Separator());
 
 				var materialsSection = new VisualElement();
-				materialsSection.Add(new Label("Selected material")
-				{
-					style = { unityFontStyleAndWeight = FontStyle.Bold }
-				});
+				materialsSection.Add(
+					new Label("Selected material") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
 
 				var material = selectedMaterials[0];
 				var materialField = new ObjectField
 				{
-					label = "Material",
-					value = material,
-					objectType = typeof(Material)
+					label = "Material", value = material, objectType = typeof(Material)
 				};
 				materialField.SetEnabled(false);
 				materialsSection.Add(materialField);
@@ -106,10 +124,11 @@ namespace MaterialLab.Editor
 
 				if (selectedMaterials.Length > 1)
 				{
-					materialsSection.Add(new Label($"({selectedMaterials.Length} materials selected, showing first only.)")
-					{
-						style = { fontSize = 10 }
-					});
+					materialsSection.Add(
+						new Label($"({selectedMaterials.Length} materials selected, showing first only.)")
+						{
+							style = { fontSize = 10 }
+						});
 				}
 
 				content.Add(materialsSection);
@@ -119,23 +138,24 @@ namespace MaterialLab.Editor
 		private void CreateMaterialFromMatcher(
 			TextureAssetMatcher matcher,
 			Texture2D[] selectedTextures,
-			string materialName)
+			string materialName,
+			bool addTimestamp)
 		{
-			var primaryTexture = matcher.Albedo
-								  ?? matcher.Main
-								  ?? selectedTextures.FirstOrDefault();
+			var primaryTexture = matcher.Albedo ?? matcher.Main ?? selectedTextures.FirstOrDefault();
 
 			var primaryPath = primaryTexture != null
 				? AssetDatabase.GetAssetPath(primaryTexture)
 				: "Assets";
 
-			if (string.IsNullOrEmpty(primaryPath))
-				primaryPath = "Assets";
+			if (string.IsNullOrEmpty(primaryPath)) primaryPath = "Assets";
 
 			var dir = Directory.Exists(primaryPath) ? primaryPath : Path.GetDirectoryName(primaryPath);
 			if (string.IsNullOrEmpty(dir)) dir = "Assets";
 
-			var safeName = string.IsNullOrWhiteSpace(materialName) ? "Material" : MakeSafeFileName(materialName);
+			var baseName = string.IsNullOrWhiteSpace(materialName) ? "Material" : MakeSafeFileName(materialName);
+			var safeName = addTimestamp
+				? baseName + "_" + MaterialLabFileUtils.GetTimestampSuffix()
+				: baseName;
 			var basePath = Path.Combine(dir, safeName + ".mat");
 
 			string uniquePath = basePath;
@@ -186,6 +206,17 @@ namespace MaterialLab.Editor
 			if (!material.HasProperty(propertyName)) return;
 
 			material.SetTexture(propertyName, texture);
+		}
+
+		private static string GetDefaultMaterialName(TextureAssetMatcher matcher, Texture2D[] selectedTextures)
+		{
+			var main = matcher.Albedo ?? matcher.Main ?? selectedTextures.FirstOrDefault();
+			if (main == null) return "Material";
+
+			var path = AssetDatabase.GetAssetPath(main);
+			if (string.IsNullOrEmpty(path)) return "Material";
+
+			return Path.GetFileNameWithoutExtension(path);
 		}
 
 		private static string MakeSafeFileName(string name)

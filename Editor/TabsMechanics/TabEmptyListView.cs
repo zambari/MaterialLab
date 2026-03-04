@@ -3,6 +3,7 @@
 	using System.Collections.Generic;
 
 	using MaterialLab.Editor;
+	using MaterialLab.UIExtensions;
 
 	using UnityEngine;
 	using UnityEngine.UIElements;

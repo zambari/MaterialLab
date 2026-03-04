@@ -6,7 +6,6 @@
 
 	using UnityEngine.UIElements;
 
-
 	/// <summary>
 	/// Base tab for MaterialLab features.
 	/// Adds 'lock selection' toggle, and virtual OnSelectionChanged method which is connected to editor events when tab
@@ -21,7 +20,11 @@
 		public MaterialLabTab(string name) : base()
 		{
 			this.Add(GetHeader(name));
-			lockSelectionToggle = new FlickToggle("SelectionLock", false, Name + "SelectionLock");
+			lockSelectionToggle = new FlickToggle("SelectionLock", false, "SelectionLock" + GetType().Name);
+			lockSelectionToggle.valueChanged += (x) =>
+												{
+													if (!x) OnSelectionChanged();
+												};
 			Add(lockSelectionToggle);
 		}
 

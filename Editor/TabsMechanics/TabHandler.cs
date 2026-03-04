@@ -1,6 +1,7 @@
 ﻿namespace MaterialLab.Tabs
 {
 	using MaterialLab.Editor;
+	using MaterialLab.UIExtensions;
 
 	using UnityEngine;
 	using UnityEngine.UI;

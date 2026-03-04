@@ -11,10 +11,6 @@ namespace MaterialLab.Editor
 	{
 		private const string prefPrefix = nameof(TextureAdjustElement);
 
-		private const int previewWidth = 256;
-
-		private const int previewHeight = 256;
-
 		private Slider multiplier;
 
 		private Slider offset;
@@ -63,6 +59,7 @@ namespace MaterialLab.Editor
 		public bool HasUserChanges { get; private set; }
 
 		private bool suppressUserChangeNotification;
+
 		public Texture2D ProcessedTexture
 		{
 			get
@@ -79,7 +76,6 @@ namespace MaterialLab.Editor
 			}
 		}
 
-
 		protected virtual void ApplyModifications(Texture2D thisSource, Texture2D thisTarget)
 		{
 			var pixels = thisSource.GetPixels();
@@ -92,7 +88,7 @@ namespace MaterialLab.Editor
 			thisTarget.SetPixels(pixels);
 			thisTarget.Apply();
 		}
-		
+
 		/// <summary>
 		/// Clamps color. unused but do not remove.
 		/// </summary>
@@ -104,7 +100,7 @@ namespace MaterialLab.Editor
 			c.g = Mathf.Clamp(c.g, .1f, .3f);
 			c.b = Mathf.Clamp(c.b, .4f, .9f);
 			c.a = Mathf.Clamp(c.a, 0, 1);
-		
+
 			return c;
 		}
 
@@ -112,7 +108,12 @@ namespace MaterialLab.Editor
 		{
 			float ProcessChannel(float v)
 			{
-				float value = v * multiplierValue + offsetValue;
+				// Treat offset as the zoom center within [0,1]:
+				// center = 0.5 + offset
+				// multiplier zooms around this center so changing multiplier
+				// does not make the region of interest "run away".
+				float center = 0.5f + offsetValue;
+				float value = center + (v - center) * multiplierValue + offsetValue;
 
 				if (curveEnabled && curve != null)
 				{
@@ -137,92 +138,92 @@ namespace MaterialLab.Editor
 		protected VisualElement GetControls(string id)
 		{
 			var controls = new VisualElement();
-			controls.style.minWidth = 200;
+			controls.style.flexGrow = 1;
 			controls.style.marginLeft = 10;
 			controls.style.marginRight = 10;
 			multiplier = GetSavedSlider(id + "multiplier", 0, 3f, 1);
-			offset = GetSavedSlider(id + "offset", -0.5f, 0.5f, 0);
+			offset = GetSavedSlider(id + "offset", -1f, 1f, 0);
+
 			// Initialize internal values from sliders so first repaint is correct.
 			multiplierValue = multiplier.value;
 			offsetValue = offset.value;
 			multiplier.RegisterValueChangedCallback(x =>
-			{
-				multiplierValue = x.newValue;
-				NotifyUserChange();
-				UpdateTexturePreview();
-			});
+													{
+														multiplierValue = x.newValue;
+														NotifyUserChange();
+														UpdateTexturePreview();
+													});
 			offset.RegisterValueChangedCallback(x =>
-			{
-				offsetValue = x.newValue;
-				NotifyUserChange();
-				UpdateTexturePreview();
-			});
-			controls.Add(new Label("Controls"));
-			controls.Add(new Label("multiplier"));
+												{
+													offsetValue = x.newValue;
+													NotifyUserChange();
+													UpdateTexturePreview();
+												});
+			// controls.Add(new Label("Controls"));
+			controls.Add(new Label("Multiplier:"));
 			controls.Add(multiplier);
-			controls.Add(new Label("offset"));
+			controls.Add(new Label("Offset:"));
 			controls.Add(offset);
 
-			invertToggle = new Toggle("Invert");
+			invertToggle = new Toggle("Invert:");
 			invertToggle.RegisterValueChangedCallback(_ =>
-			{
-				NotifyUserChange();
-				UpdateTexturePreview();
-			});
+													  {
+														  NotifyUserChange();
+														  UpdateTexturePreview();
+													  });
 			controls.Add(invertToggle);
 
-			curvesToggle = new Toggle("Enable curves");
+			curvesToggle = new Toggle("Enable curves:");
 			curvesToggle.RegisterValueChangedCallback(evt =>
-			{
-				curveEnabled = evt.newValue;
-				if (curveField != null)
-				{
-					curveField.style.display = curveEnabled ? DisplayStyle.Flex : DisplayStyle.None;
-				}
-				NotifyUserChange();
-				UpdateTexturePreview();
-			});
+													  {
+														  curveEnabled = evt.newValue;
+														  if (curveField != null)
+														  {
+															  curveField.style.display =
+																  curveEnabled ? DisplayStyle.Flex : DisplayStyle.None;
+														  }
+
+														  NotifyUserChange();
+														  UpdateTexturePreview();
+													  });
 			controls.Add(curvesToggle);
 
-			curveField = new CurveField("Curve")
-			{
-				value = curve
-			};
+			curveField = new CurveField("Curve:") { value = curve };
 			curveField.style.display = DisplayStyle.None;
 			curveField.RegisterValueChangedCallback(evt =>
-			{
-				curve = evt.newValue ?? AnimationCurve.Linear(0f, 0f, 1f, 1f);
-				NotifyUserChange();
-				UpdateTexturePreview();
-			});
+													{
+														curve = evt.newValue ?? AnimationCurve.Linear(0f, 0f, 1f, 1f);
+														NotifyUserChange();
+														UpdateTexturePreview();
+													});
 			controls.Add(curveField);
 
-			var resetButton = new Button(
-				() =>
-				{
-					suppressUserChangeNotification = true;
-					multiplier.value = 1f;
-					offset.value = 0f;
-					if (invertToggle != null) invertToggle.value = false;
-					if (curvesToggle != null) curvesToggle.value = false;
-					curveEnabled = false;
-					curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
-					if (curveField != null) curveField.value = curve;
-					suppressUserChangeNotification = false;
-					HasUserChanges = false;
-					OnUserChange?.Invoke();
-					UpdateTexturePreview();
-				})
-			{
-				text = "Reset"
-			};
+			var resetButton = new Button(() =>
+										 {
+											 suppressUserChangeNotification = true;
+											 multiplier.value = 1f;
+											 offset.value = 0f;
+											 if (invertToggle != null) invertToggle.value = false;
+											 if (curvesToggle != null) curvesToggle.value = false;
+											 curveEnabled = false;
+											 curve = AnimationCurve.Linear(0f, 0f, 1f, 1f);
+											 if (curveField != null) curveField.value = curve;
+											 suppressUserChangeNotification = false;
+											 HasUserChanges = false;
+											 OnUserChange?.Invoke();
+											 UpdateTexturePreview();
+										 }) { text = "Reset" };
 			resetButton.style.marginTop = 4;
 			controls.Add(resetButton);
+			histogramImage = new Image();
+			histogramImage.style.flexGrow=1;
+			histogramImage.style.height = 40;
+			histogramImage.scaleMode = ScaleMode.StretchToFill;
+			controls.Add(new Label("Histogram"));
 
+			controls.Add(histogramImage);
 			return controls;
 		}
-
-	
 
 		private void UpdateTexturePreview()
 		{
@@ -257,23 +258,20 @@ namespace MaterialLab.Editor
 				var readableRow = new Row();
 				readableRow.Add(new Label("Error, texture is not readable. Enable Read/Write or click Fix."));
 
-				var fixButton = new Button(
-					() =>
-					{
-						var fixedTexture = texture.MakeReadableInPlace();
-						if (fixedTexture == null || !fixedTexture.isReadable)
-						{
-							Debug.LogWarning($"[{nameof(TextureAdjustElement)}] Failed to make texture readable: {texture?.name}");
-							return;
-						}
+				var fixButton = new Button(() =>
+										   {
+											   var fixedTexture = texture.MakeReadableInPlace();
+											   if (fixedTexture == null || !fixedTexture.isReadable)
+											   {
+												   Debug.LogWarning(
+													   $"[{nameof(TextureAdjustElement)}] Failed to make texture readable: {texture?.name}");
+												   return;
+											   }
 
-						Clear();
-						this.AddBorder();
-						BuildUIForTexture(fixedTexture, name);
-					})
-				{
-					text = "Fix"
-				};
+											   Clear();
+											   this.AddBorder();
+											   BuildUIForTexture(fixedTexture, name);
+										   }) { text = "Fix" };
 
 				readableRow.Add(fixButton);
 				Add(readableRow);
@@ -286,6 +284,7 @@ namespace MaterialLab.Editor
 		private void BuildUIForTexture(Texture2D texture, string name)
 		{
 			sourceTexture = texture;
+
 			// Take a decoupled full-resolution snapshot as our immutable "input".
 			sourceSnapshotFull = new Texture2D(sourceTexture.width, sourceTexture.height, TextureFormat.RGBA32, false);
 			sourceSnapshotFull.SetPixels(sourceTexture.GetPixels());
@@ -301,28 +300,20 @@ namespace MaterialLab.Editor
 
 			var originalColumn = new VisualElement();
 			originalColumn.Add(new TexturePreview(texture));
-			row.Add(originalColumn);
 
 			var controlsColumn = GetControls(name);
-			row.Add(controlsColumn);
 
 			var previewColumn = new VisualElement();
 			resultPreview = new TexturePreview(texture);
+
 			previewColumn.Add(resultPreview);
 
-			histogramImage = new Image();
-			histogramImage.style.width = 160;
-			histogramImage.style.height = 40;
-			histogramImage.scaleMode = ScaleMode.StretchToFill;
-			previewColumn.Add(new Label("Histogram"));
-			previewColumn.Add(histogramImage);
-
+			row.Add(originalColumn);
+			row.Add(controlsColumn);
 			row.Add(previewColumn);
-
 			Add(row);
 
-			textureData.RepaintHistogram();
-			histogramImage.image = textureData.HistogramTexture;
+			textureData?.RepaintHistogram();
 			UpdateTexturePreview();
 		}
 
@@ -331,16 +322,14 @@ namespace MaterialLab.Editor
 			var slider = new Slider() { lowValue = lowValue, highValue = highValue };
 			float control1Value = PlayerPrefs.GetFloat(prefPrefix + id, defaultValue);
 			slider.value = control1Value;
-			slider.RegisterValueChangedCallback(x =>
-												{
-													PlayerPrefs.SetFloat(prefPrefix + id, x.newValue);
-												});
+			slider.RegisterValueChangedCallback(x => { PlayerPrefs.SetFloat(prefPrefix + id, x.newValue); });
 			return slider;
 		}
 
 		private void NotifyUserChange()
 		{
 			if (suppressUserChangeNotification) return;
+
 			HasUserChanges = true;
 			OnUserChange?.Invoke();
 		}

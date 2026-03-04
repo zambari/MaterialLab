@@ -19,7 +19,7 @@ namespace MaterialLab.Editor
 		/// <inheritdoc />
 		public TextureCombinerTab() : base("Texture Combiner")
 		{
-			recognizedRolesLabel = new Label();
+			recognizedRolesLabel = new LabelInfo();
 			Add(recognizedRolesLabel);
 
 			content = new VisualElement();
