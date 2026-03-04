@@ -40,14 +40,14 @@
 					_texture = new Texture2D(sourceTexture.width, sourceTexture.height);
 				}
 
-				ApplyModifcations(sourceTexture, _texture);
+				ApplyModifications(sourceTexture, _texture);
 
 				return _texture;
 			}
 		}
 
 
-		protected virtual void ApplyModifcations(Texture2D thisSource, Texture2D thisTarget)
+		protected virtual void ApplyModifications(Texture2D thisSource, Texture2D thisTarget)
 		{
 			var pixels = thisSource.GetPixels();
 			for (int i = 0; i < pixels.Length; i++)
@@ -66,7 +66,6 @@
 			c.g = Mathf.Clamp(c.g, .1f, .3f);
 			c.b = Mathf.Clamp(c.b, .4f, .9f);
 			c.a = Mathf.Clamp(c.a, 0, 1);
-
 		
 			return c;
 		}
@@ -105,7 +104,7 @@
 
 		private void UpdateTexturePreview()
 		{
-			ApplyModifcations(sourceTexture_resized, _texture_resized);
+			ApplyModifications(sourceTexture_resized, _texture_resized);
 			resultPreview.Texture = _texture_resized;
 			OnTextureChange?.Invoke();
 		}

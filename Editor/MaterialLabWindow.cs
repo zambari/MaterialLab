@@ -11,7 +11,7 @@
 
 	public class MaterialLabWindow : MaterialLabBaseWindow
 	{
-		[MenuItem(MenuPathBase + "Material Lab1", false)]
+		[MenuItem(MenuPathBase + "Material Lab", false)]
 		private static void OpenWindow()
 		{
 			var inspectorType = Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");
@@ -19,19 +19,17 @@
 			window.titleContent = new GUIContent("Material Lab");
 		}
 
-		private VisualElement contextElement;
-
 		public void CreateGUI()
 		{
 			var textureTab = new TextureEditTab();
 			var materialTab = new MaterialTab();
+			var textureCombinerTab = new TextureCombinerTab();
 			var content = new VisualElement();
+			content.SetPadding(5);
 			content.style.height = Length.Percent(100);
-			content.style.backgroundColor = Color.red;
-			var tabs = new TabSelector(content, nameof(MaterialLabWindow), textureTab, materialTab);
-
+			var tabs = new TabSelector(content, nameof(MaterialLabWindow), textureTab, textureCombinerTab, materialTab);
 			rootVisualElement.Add(tabs);
-			// rootVisualElement.Add(content);
+			rootVisualElement.Add(content);
 		}
 	}
 }

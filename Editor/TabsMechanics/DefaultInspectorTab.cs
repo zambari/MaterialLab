@@ -3,7 +3,7 @@
 	using UnityEditor;
 	using UnityEditor.UIElements;
 
-	public class DefaultInspectorTab : EditBaseTab
+	public class DefaultInspectorTab : MaterialLabTab
 	{
 		/// <inheritdoc />
 		public DefaultInspectorTab(SerializedObject serializedObject, UnityEditor.Editor editor) : base(

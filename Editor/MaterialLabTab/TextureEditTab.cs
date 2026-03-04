@@ -2,7 +2,7 @@
 {
 	using MaterialLab.Tabs;
 
-	public class TextureEditTab: EditBaseTab
+	public class TextureEditTab: MaterialLabTab
 	{
 		/// <inheritdoc />
 		public TextureEditTab() : base("Texture") { }
