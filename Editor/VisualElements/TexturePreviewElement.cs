@@ -12,7 +12,10 @@ namespace MaterialLab.Editor
 		private readonly Texture2D sourceTexture;
 
 		private readonly TexturePreview preview;
-
+	/// <summary>
+		/// Fired when the user clicks Fix on the not-readable gate and the texture was made readable. Pass the fixed texture so the parent can replace this element.
+		/// </summary>
+		public System.Action<Texture2D> OnTextureFixed;
 		private Texture2D alphaTexture;
 
 		private Texture2D alphaNormalizedTexture;
@@ -48,8 +51,15 @@ namespace MaterialLab.Editor
 			this.style.width = Length.Pixels(sizex + 2 * padding);
 			this.style.height = Length.Pixels(sizey + 2 * padding);
 
+			if (texture != null && !texture.isReadable)
+			{
+				var gate = new TextureReadableGateElement(texture);
+				gate.OnTextureFixed = fixedTexture => OnTextureFixed?.Invoke(fixedTexture);
+				Add(gate);
+			}
+
 			// Alpha tools overlay
-			if (true || MightHaveAlpha(texture))
+			if (MightHaveAlpha(texture))
 			{
 				var overlay = new VisualElement { style = { position = Position.Absolute, top = 2, right = 2 } };
 

@@ -1,6 +1,5 @@
 namespace MaterialLab.Editor
 {
-	using System.Collections.Generic;
 	using System.IO;
 	using System.Linq;
 
@@ -14,17 +13,7 @@ namespace MaterialLab.Editor
 
 	public class MaterialTab : MaterialLabTab
 	{
-		private const int ElementWidth = 150;
-
 		private readonly VisualElement content;
-		private readonly List<string> createdFiles = new();
-
-		// Channel import state: when user clicks "Import for channel editing" on a single texture
-		private bool channelImportActive;
-		private Texture2D channelImportSource;
-		private Texture2D channelImportRgb;
-		private Texture2D channelImportAlpha;
-		private Texture2D lastRecombinedResult;
 
 		/// <inheritdoc />
 		public MaterialTab() : base("Material")
@@ -54,10 +43,6 @@ namespace MaterialLab.Editor
 				.SelectMany(go => go.GetComponents<Renderer>())
 				.Where(r => r != null)
 				.ToArray();
-
-			// Clear channel import state if selection no longer matches
-			if (channelImportActive && (selectedTextures.Length != 1 || selectedTextures[0] != channelImportSource))
-				channelImportActive = false;
 
 			bool hasRenderersWithMaterials = renderersFromSelection.Any(r => r.sharedMaterials != null && r.sharedMaterials.Length > 0);
 			bool hasAnything = selectedTextures.Length > 0 || selectedMaterials.Length > 0 || hasRenderersWithMaterials;
@@ -116,83 +101,7 @@ namespace MaterialLab.Editor
 											  }) { text = "Create new material" };
 				texturesSection.Add(createButton);
 
-				if (selectedTextures.Length == 1)
-				{
-					texturesSection.Add(new Separator());
-					var importBtn = new Button(() =>
-					{
-						StartChannelImport(selectedTextures[0]);
-						RepaintContent();
-					})
-					{
-						text = "Import for channel editing",
-						style = { width = ElementWidth }
-					};
-					importBtn.SetEnabled(selectedTextures[0] != null);
-					texturesSection.Add(importBtn);
-				}
-
 				content.Add(texturesSection);
-				hasAnySection = true;
-			}
-
-			// Channel import section: edit RGB and Alpha separately, then recombine and save
-			if (channelImportActive && channelImportRgb != null && channelImportAlpha != null)
-			{
-				if (hasAnySection) content.Add(new Separator());
-
-				if (createdFiles.Count > 0)
-				{
-					content.Add(new Button(DeleteFilesCreatedInThisSession) { text = "Undo File Creation", style = { width = ElementWidth } });
-				}
-
-				var channelSection = new VisualElement();
-				channelSection.Add(new Label("Channel editing (RGB + Alpha)") { style = { unityFontStyleAndWeight = FontStyle.Bold } });
-				channelSection.Add(new Label("Edit RGB and alpha separately, then Recombine and save.") { style = { fontSize = 10 } });
-
-				var rgbAdjust = new TextureAdjustElement(channelImportRgb, "RGB");
-				var alphaAdjust = new TextureAdjustElement(channelImportAlpha, "Alpha");
-				channelSection.Add(rgbAdjust);
-				channelSection.Add(alphaAdjust);
-
-				void OnAssetSaved(Texture2D saved)
-				{
-					Selection.activeObject = saved;
-					EditorGUIUtility.PingObject(saved);
-				}
-
-				var saveRow = new TextureThreeWaySaveRow(createdFiles, OnAssetSaved, ElementWidth);
-				saveRow.SetContext(null, null, null);
-				channelSection.Add(new Button(OnRecombine) { text = "Recombine", style = { width = ElementWidth } });
-				channelSection.Add(saveRow);
-
-				void OnRecombine()
-				{
-					var rgbTex = rgbAdjust?.ProcessedTexture;
-					var alphaTex = alphaAdjust?.ProcessedTexture;
-					if (rgbTex == null || alphaTex == null) return;
-					if (rgbTex.width != alphaTex.width || rgbTex.height != alphaTex.height) return;
-
-					lastRecombinedResult = new Texture2D(rgbTex.width, rgbTex.height, TextureFormat.RGBA32, false);
-					var rgbPixels = rgbTex.GetPixels();
-					var alphaPixels = alphaTex.GetPixels();
-					var outPixels = new Color[rgbPixels.Length];
-					for (int i = 0; i < rgbPixels.Length; i++)
-					{
-						var a = alphaPixels[i];
-						var gray = (a.r + a.g + a.b) / 3f;
-						outPixels[i] = new Color(rgbPixels[i].r, rgbPixels[i].g, rgbPixels[i].b, gray);
-					}
-					lastRecombinedResult.SetPixels(outPixels);
-					lastRecombinedResult.Apply();
-
-					saveRow.SetContext(
-						channelImportSource,
-						() => lastRecombinedResult,
-						() => "recombined_" + MaterialLabFileUtils.GetTimestampSuffix());
-				}
-
-				content.Add(channelSection);
 				hasAnySection = true;
 			}
 
@@ -364,66 +273,6 @@ namespace MaterialLab.Editor
 			}
 
 			return new string(chars);
-		}
-
-		private void StartChannelImport(Texture2D source)
-		{
-			if (source == null) return;
-
-			bool wasReadable = source.EnsureReadableWithStatus();
-			Color[] pixels;
-			try
-			{
-				pixels = source.GetPixels();
-			}
-			finally
-			{
-				if (!wasReadable) RestoreReadable(source, false);
-			}
-
-			int w = source.width;
-			int h = source.height;
-			var rgbCopy = new Texture2D(w, h, TextureFormat.RGBA32, false);
-			var alphaCopy = new Texture2D(w, h, TextureFormat.RGBA32, false);
-			var rgbPixels = new Color[pixels.Length];
-			var alphaPixels = new Color[pixels.Length];
-			for (int i = 0; i < pixels.Length; i++)
-			{
-				var p = pixels[i];
-				rgbPixels[i] = new Color(p.r, p.g, p.b, 1f);
-				alphaPixels[i] = new Color(p.a, p.a, p.a, 1f);
-			}
-			rgbCopy.SetPixels(rgbPixels);
-			rgbCopy.Apply();
-			alphaCopy.SetPixels(alphaPixels);
-			alphaCopy.Apply();
-
-			channelImportSource = source;
-			channelImportRgb = rgbCopy;
-			channelImportAlpha = alphaCopy;
-			channelImportActive = true;
-		}
-
-		private static void RestoreReadable(Texture2D texture, bool readable)
-		{
-			if (readable) return;
-			var path = AssetDatabase.GetAssetPath(texture);
-			if (string.IsNullOrEmpty(path)) return;
-			var importer = (TextureImporter)AssetImporter.GetAtPath(path);
-			importer.isReadable = false;
-			importer.SaveAndReimport();
-		}
-
-		private void DeleteFilesCreatedInThisSession()
-		{
-			foreach (var path in createdFiles)
-			{
-				if (Path.GetExtension(path) != ".meta")
-					Debug.Log($"Deleting {path}");
-				File.Delete(path);
-			}
-			createdFiles.Clear();
-			AssetDatabase.Refresh();
 		}
 	}
 }

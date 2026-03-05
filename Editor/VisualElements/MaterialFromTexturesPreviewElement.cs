@@ -56,6 +56,13 @@ namespace MaterialLab.Editor
 				card.Add(roleLabel);
 
 				var preview = new TexturePreviewElement(tex);
+				preview.OnTextureFixed = fixedTexture =>
+				{
+					card.Remove(preview);
+					var newPreview = new TexturePreviewElement(fixedTexture);
+					newPreview.RegisterCallback<ClickEvent>(_ => { EditorGUIUtility.PingObject(fixedTexture); });
+					card.Add(newPreview);
+				};
 				preview.RegisterCallback<ClickEvent>(_ => { EditorGUIUtility.PingObject(tex); });
 				card.Add(preview);
 

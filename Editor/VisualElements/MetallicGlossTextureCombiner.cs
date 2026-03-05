@@ -7,85 +7,137 @@ namespace MaterialLab.Editor
 
 	public class MetallicGlossTextureCombiner : VisualElement
 	{
-		private TextureAdjustElement metallicAdjust;
-		private TextureAdjustElement glossAdjust;
+		private TextureAdjustElement leftAdjust;
+		private TextureAdjustElement rightAdjust;
 		private Texture2D lastCombinedResult;
+		private Texture2D pathSource;
 
+		/// <summary>Build from matcher (2 or 3 textures): metallic + smoothness/roughness.</summary>
 		public MetallicGlossTextureCombiner(
 			TextureAssetMatcher matcher,
 			System.Collections.Generic.IList<string> createdFiles,
 			System.Action<Texture2D> onAssetSaved = null,
 			int buttonWidth = 150)
 		{
-			var mainTexture = matcher.Main;
+			var main = matcher.Main;
 			var metallic = matcher.Metallic;
-			var roughness = matcher.Roughness;
 			var smoothness = matcher.Smoothness;
+			var roughness = matcher.Roughness;
 			var smoothSource = smoothness ?? roughness;
+			BuildEditor(
+				metallic,
+				smoothSource,
+				metallic,
+				"Metallic (RGB):",
+				"Smoothness (Alpha):",
+				main,
+				createdFiles,
+				onAssetSaved,
+				buttonWidth);
+		}
+
+		/// <summary>Build from two channel textures (e.g. decoded RGB + Alpha from one texture).</summary>
+		public MetallicGlossTextureCombiner(
+			Texture2D leftChannel,
+			Texture2D rightChannel,
+			Texture2D pathSourceForSave,
+			string leftLabel,
+			string rightLabel,
+			Texture2D mainPreview,
+			System.Collections.Generic.IList<string> createdFiles,
+			System.Action<Texture2D> onAssetSaved = null,
+			int buttonWidth = 150)
+		{
+			BuildEditor(
+				leftChannel,
+				rightChannel,
+				pathSourceForSave,
+				leftLabel,
+				rightLabel,
+				mainPreview,
+				createdFiles,
+				onAssetSaved,
+				buttonWidth);
+		}
+
+		private void BuildEditor(
+			Texture2D leftTexture,
+			Texture2D rightTexture,
+			Texture2D pathSourceForSave,
+			string leftLabel,
+			string rightLabel,
+			Texture2D mainPreview,
+			System.Collections.Generic.IList<string> createdFiles,
+			System.Action<Texture2D> onAssetSaved,
+			int buttonWidth)
+		{
+			pathSource = pathSourceForSave;
 
 			var texturePreviewRow = new VisualElement() { style = { flexDirection = FlexDirection.Row } };
-			texturePreviewRow.Add(GetPreviewWithLabel(mainTexture, "Main texture"));
-			texturePreviewRow.Add(GetPreviewWithLabel(metallic, "Metallic texture"));
-			texturePreviewRow.Add(GetPreviewWithLabel(smoothSource, smoothness != null ? "Smoothness" : "Roughness"));
+			if (mainPreview != null)
+				texturePreviewRow.Add(GetPreviewWithLabel(mainPreview, "Source"));
+			texturePreviewRow.Add(GetPreviewWithLabel(leftTexture, leftLabel));
+			texturePreviewRow.Add(GetPreviewWithLabel(rightTexture, rightLabel));
 			texturePreviewRow.AddBorder();
-			metallicAdjust = new TextureAdjustElement(metallic, "Metallic (RGB):");
-			glossAdjust = new TextureAdjustElement(smoothSource, "Smoothness (Alpha):");
+
+			leftAdjust = new TextureAdjustElement(leftTexture, leftLabel);
+			rightAdjust = new TextureAdjustElement(rightTexture, rightLabel);
 
 			Add(texturePreviewRow);
-			Add(metallicAdjust);
-			Add(glossAdjust);
+			Add(leftAdjust);
+			Add(rightAdjust);
+
+			if (leftTexture == null || rightTexture == null)
+			{
+				Add(new Label("Error: both channel textures are required."));
+				return;
+			}
+			if (leftTexture.width != rightTexture.width || leftTexture.height != rightTexture.height)
+			{
+				Add(new Label("Error: channel textures have different sizes."));
+				return;
+			}
 
 			var addTimeStamp = new Toggle("Add Timestamp") { value = true };
 			var swapAlphaColor = new Toggle("Swap alpha and color") { value = false };
+			
+			var saveRow = new TextureThreeWaySaveRow(createdFiles, onAssetSaved, buttonWidth);
+			saveRow.SetContext(null, null, null);
+			
+			
+			Add(addTimeStamp);
+			Add(swapAlphaColor);
 
-			if (metallic != null && smoothSource != null)
+			Add(new Button(OnCombine) { text = "Combine (gloss in alpha)" });
+			
+			Add(saveRow);
+
+			void OnCombine()
 			{
-				if (metallic.width != smoothSource.width || metallic.height != smoothSource.height)
+				var leftSource = leftAdjust?.ProcessedTexture;
+				var rightSource = rightAdjust?.ProcessedTexture;
+				if (leftSource == null || rightSource == null) return;
+
+				var leftPixels = leftSource.GetPixels();
+				var rightPixels = rightSource.GetPixels();
+				if (swapAlphaColor.value) (leftPixels, rightPixels) = (rightPixels, leftPixels);
+
+				lastCombinedResult = new Texture2D(leftSource.width, leftSource.height, TextureFormat.RGBA32, false);
+				var resultPixels = new Color[leftPixels.Length];
+				for (int i = 0; i < leftPixels.Length; i++)
 				{
-					Add(new Label("Error, metallic and smooth/rough have different sizes"));
+					var m = leftPixels[i];
+					var g = rightPixels[i];
+					var glossAvg = (g.r + g.g + g.b) / 3f;
+					resultPixels[i] = new Color(m.r, m.g, m.b, glossAvg);
 				}
-				else
-				{
-					Add(addTimeStamp);
-					Add(swapAlphaColor);
+				lastCombinedResult.SetPixels(resultPixels);
+				lastCombinedResult.Apply();
 
-					var saveRow = new TextureThreeWaySaveRow(createdFiles, onAssetSaved, buttonWidth);
-					saveRow.SetContext(null, null, null);
-					Add(new Button(OnCombine) { text = "Combine (gloss in alpha)" });
-					Add(saveRow);
-
-					void OnCombine()
-					{
-						var metallicSource = metallicAdjust?.ProcessedTexture;
-						var glossSource = glossAdjust?.ProcessedTexture;
-						if (metallicSource == null || glossSource == null) return;
-
-						var metallicPixels = metallicSource.GetPixels();
-						var glossPixels = glossSource.GetPixels();
-						if (swapAlphaColor.value) (metallicPixels, glossPixels) = (glossPixels, metallicPixels);
-
-						lastCombinedResult = new Texture2D(
-							metallicSource.width,
-							metallicSource.height,
-							TextureFormat.RGBA32,
-							false);
-						var resultPixels = new Color[metallicPixels.Length];
-						for (int i = 0; i < metallicPixels.Length; i++)
-						{
-							var m = metallicPixels[i];
-							var g = glossPixels[i];
-							var glossAvg = (g.r + g.g + g.b) / 3f;
-							resultPixels[i] = new Color(m.r, m.g, m.b, glossAvg);
-						}
-						lastCombinedResult.SetPixels(resultPixels);
-						lastCombinedResult.Apply();
-
-						saveRow.SetContext(
-							metallic,
-							() => lastCombinedResult,
-							() => addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined");
-					}
-				}
+				saveRow.SetContext(
+					pathSource,
+					() => lastCombinedResult,
+					() => addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined");
 			}
 		}
 
