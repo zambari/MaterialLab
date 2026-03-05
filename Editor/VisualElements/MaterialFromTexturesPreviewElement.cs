@@ -38,6 +38,7 @@ namespace MaterialLab.Editor
 			foreach (var role in roles)
 			{
 				var tex = matcher.GetTextureByRole(role);
+				if (role == TextureRole.Albedo) continue;
 				if (tex == null) continue;
 
 				var card = new VisualElement();

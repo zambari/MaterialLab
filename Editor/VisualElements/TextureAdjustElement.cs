@@ -64,6 +64,8 @@ namespace MaterialLab.Editor
 		{
 			get
 			{
+				if (sourceTexture == null) return null;
+
 				if (_texture == null)
 				{
 					_texture = new Texture2D(sourceTexture.width, sourceTexture.height);
@@ -248,33 +250,22 @@ namespace MaterialLab.Editor
 			this.AddBorder();
 			if (texture == null)
 			{
-				Add(new Label("No texture selected"));
+				Add(new TextureReadableGateElement(null));
 				return;
 			}
 
 			Add(new Label($"Edit {name}"));
 			if (!texture.isReadable)
 			{
-				var readableRow = new Row();
-				readableRow.Add(new Label("Error, texture is not readable. Enable Read/Write or click Fix."));
-
-				var fixButton = new Button(() =>
-										   {
-											   var fixedTexture = texture.MakeReadableInPlace();
-											   if (fixedTexture == null || !fixedTexture.isReadable)
-											   {
-												   Debug.LogWarning(
-													   $"[{nameof(TextureAdjustElement)}] Failed to make texture readable: {texture?.name}");
-												   return;
-											   }
-
-											   Clear();
-											   this.AddBorder();
-											   BuildUIForTexture(fixedTexture, name);
-										   }) { text = "Fix" };
-
-				readableRow.Add(fixButton);
-				Add(readableRow);
+				var gate = new TextureReadableGateElement(texture);
+				gate.OnTextureFixed = fixedTexture =>
+				{
+					Clear();
+					this.AddBorder();
+					Add(new Label($"Edit {name}"));
+					BuildUIForTexture(fixedTexture, name);
+				};
+				Add(gate);
 				return;
 			}
 

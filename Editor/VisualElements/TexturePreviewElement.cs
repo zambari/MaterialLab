@@ -49,19 +49,11 @@ namespace MaterialLab.Editor
 			this.style.height = Length.Pixels(sizey + 2 * padding);
 
 			// Alpha tools overlay
-			if (MightHaveAlpha(texture))
+			if (true || MightHaveAlpha(texture))
 			{
-				var overlay = new VisualElement
-				{
-					style =
-					{
-						position = Position.Absolute,
-						top = 2,
-						right = 2
-					}
-				};
+				var overlay = new VisualElement { style = { position = Position.Absolute, top = 2, right = 2 } };
 
-				alphaToggleLabel = new Label("🙾")
+				alphaToggleLabel = new Label("[A]")
 				{
 					style =
 					{
@@ -69,10 +61,10 @@ namespace MaterialLab.Editor
 						unityTextAlign = TextAnchor.MiddleCenter,
 						backgroundColor = new Color(0f, 0f, 0f, 0.6f),
 						color = Color.white,
-						paddingLeft = 2,
-						paddingRight = 2,
-						paddingTop = 1,
-						paddingBottom = 1
+						top = 2,
+						right = 2,
+						opacity = 0.5f,
+						position = Position.Absolute,
 					}
 				};
 				alphaToggleLabel.RegisterCallback<ClickEvent>(_ => CycleAlphaMode());
@@ -81,15 +73,14 @@ namespace MaterialLab.Editor
 				{
 					style =
 					{
+						opacity = 0.5f,
 						fontSize = 9,
 						color = Color.white,
+						unityTextAlign = TextAnchor.MiddleCenter,
 						backgroundColor = new Color(0f, 0f, 0f, 0.6f),
-						marginTop = 2,
-						paddingLeft = 2,
-						paddingRight = 2,
-						paddingTop = 0,
-						paddingBottom = 0,
-						display = DisplayStyle.None
+						bottom = 2,
+						right = 2,
+						position = Position.Absolute,
 					}
 				};
 
@@ -122,6 +113,7 @@ namespace MaterialLab.Editor
 		private static bool MightHaveAlpha(Texture2D texture)
 		{
 			if (texture == null) return false;
+
 			// Simple heuristic based on format name; avoids expensive reads until user clicks.
 			var formatName = texture.format.ToString();
 			return formatName.Contains("RGBA") ||
@@ -147,6 +139,7 @@ namespace MaterialLab.Editor
 					alphaInfoLabel.style.display = DisplayStyle.Flex;
 					alphaInfoLabel.text = "no alpha";
 				}
+
 				preview.Texture = sourceTexture;
 				alphaMode = 0;
 				return;
@@ -168,6 +161,7 @@ namespace MaterialLab.Editor
 						alphaInfoLabel.style.display = DisplayStyle.Flex;
 						alphaInfoLabel.text = $"α [{alphaMin:0.000}..{alphaMax:0.000}]";
 					}
+
 					break;
 
 				case 2:
@@ -177,6 +171,7 @@ namespace MaterialLab.Editor
 						alphaInfoLabel.style.display = DisplayStyle.Flex;
 						alphaInfoLabel.text = $"α norm [{alphaMin:0.000}..{alphaMax:0.000}]";
 					}
+
 					break;
 			}
 		}
@@ -193,7 +188,8 @@ namespace MaterialLab.Editor
 
 			if (!sourceTexture.isReadable)
 			{
-				Debug.LogWarning($"[{nameof(TexturePreviewElement)}] Texture '{sourceTexture.name}' is not readable. Enable Read/Write to preview alpha.");
+				Debug.LogWarning(
+					$"[{nameof(TexturePreviewElement)}] Texture '{sourceTexture.name}' is not readable. Enable Read/Write to preview alpha.");
 				return;
 			}
 
@@ -218,18 +214,24 @@ namespace MaterialLab.Editor
 				{
 					alphaToggleLabel.style.display = DisplayStyle.None;
 				}
+
 				if (alphaInfoLabel != null)
 				{
 					alphaInfoLabel.style.display = DisplayStyle.Flex;
 					alphaInfoLabel.text = "no alpha";
 				}
+
 				return;
 			}
 
 			hasAlpha = true;
 
 			alphaTexture = new Texture2D(sourceTexture.width, sourceTexture.height, TextureFormat.RGBA32, false);
-			alphaNormalizedTexture = new Texture2D(sourceTexture.width, sourceTexture.height, TextureFormat.RGBA32, false);
+			alphaNormalizedTexture = new Texture2D(
+				sourceTexture.width,
+				sourceTexture.height,
+				TextureFormat.RGBA32,
+				false);
 
 			var raw = new Color[pixels.Length];
 			var norm = new Color[pixels.Length];
