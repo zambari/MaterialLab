@@ -9,8 +9,8 @@ namespace MaterialLab.Editor
 	{
 		private TextureAdjustElement leftAdjust;
 		private TextureAdjustElement rightAdjust;
-		private Texture2D lastCombinedResult;
 		private Texture2D pathSource;
+		private Texture2D lastCombinedResult;
 
 		/// <summary>Build from matcher (2 or 3 textures): metallic + smoothness/roughness.</summary>
 		public MetallicGlossTextureCombiner(
@@ -33,10 +33,11 @@ namespace MaterialLab.Editor
 				main,
 				createdFiles,
 				onAssetSaved,
+				null,
 				buttonWidth);
 		}
 
-		/// <summary>Build from two channel textures (e.g. decoded RGB + Alpha from one texture).</summary>
+		/// <summary>Build from two channel textures (e.g. decoded RGB + Alpha from one texture). When onTwoAssetsSaved is set, shows "Save as two assets" button.</summary>
 		public MetallicGlossTextureCombiner(
 			Texture2D leftChannel,
 			Texture2D rightChannel,
@@ -46,6 +47,7 @@ namespace MaterialLab.Editor
 			Texture2D mainPreview,
 			System.Collections.Generic.IList<string> createdFiles,
 			System.Action<Texture2D> onAssetSaved = null,
+			System.Action<Texture2D, Texture2D> onTwoAssetsSaved = null,
 			int buttonWidth = 150)
 		{
 			BuildEditor(
@@ -57,6 +59,7 @@ namespace MaterialLab.Editor
 				mainPreview,
 				createdFiles,
 				onAssetSaved,
+				onTwoAssetsSaved,
 				buttonWidth);
 		}
 
@@ -69,6 +72,7 @@ namespace MaterialLab.Editor
 			Texture2D mainPreview,
 			System.Collections.Generic.IList<string> createdFiles,
 			System.Action<Texture2D> onAssetSaved,
+			System.Action<Texture2D, Texture2D> onTwoAssetsSaved,
 			int buttonWidth)
 		{
 			pathSource = pathSourceForSave;
@@ -100,29 +104,18 @@ namespace MaterialLab.Editor
 
 			var addTimeStamp = new Toggle("Add Timestamp") { value = true };
 			var swapAlphaColor = new Toggle("Swap alpha and color") { value = false };
-			
-			var saveRow = new TextureThreeWaySaveRow(createdFiles, onAssetSaved, buttonWidth);
-			saveRow.SetContext(null, null, null);
-			
-			
-			Add(addTimeStamp);
-			Add(swapAlphaColor);
 
-			Add(new Button(OnCombine) { text = "Combine (gloss in alpha)" });
-			
-			Add(saveRow);
-
-			void OnCombine()
+			Texture2D GetCombinedTexture()
 			{
 				var leftSource = leftAdjust?.ProcessedTexture;
 				var rightSource = rightAdjust?.ProcessedTexture;
-				if (leftSource == null || rightSource == null) return;
+				if (leftSource == null || rightSource == null) return null;
 
 				var leftPixels = leftSource.GetPixels();
 				var rightPixels = rightSource.GetPixels();
 				if (swapAlphaColor.value) (leftPixels, rightPixels) = (rightPixels, leftPixels);
 
-				lastCombinedResult = new Texture2D(leftSource.width, leftSource.height, TextureFormat.RGBA32, false);
+				var result = new Texture2D(leftSource.width, leftSource.height, TextureFormat.RGBA32, false);
 				var resultPixels = new Color[leftPixels.Length];
 				for (int i = 0; i < leftPixels.Length; i++)
 				{
@@ -131,13 +124,51 @@ namespace MaterialLab.Editor
 					var glossAvg = (g.r + g.g + g.b) / 3f;
 					resultPixels[i] = new Color(m.r, m.g, m.b, glossAvg);
 				}
-				lastCombinedResult.SetPixels(resultPixels);
-				lastCombinedResult.Apply();
+				result.SetPixels(resultPixels);
+				result.Apply();
+				return result;
+			}
 
-				saveRow.SetContext(
-					pathSource,
-					() => lastCombinedResult,
-					() => addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined");
+			var saveRow = new TextureThreeWaySaveRow(createdFiles, onAssetSaved, buttonWidth, "combine");
+			saveRow.SetContext(
+				pathSource,
+				GetCombinedTexture,
+				() => addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined");
+
+			Add(addTimeStamp);
+			Add(swapAlphaColor);
+			// Add(new Button(OnCombine) { text = "Combine (gloss in alpha)", tooltip = "Build combined texture; then use the save buttons below." });
+			Add(saveRow);
+
+			// void OnCombine()
+			// {
+			// 	lastCombinedResult = GetCombinedTexture();
+			// 	if (lastCombinedResult != null)
+			// 	{
+			// 		saveRow.SetContext(
+			// 			pathSource,
+			// 			() => lastCombinedResult,
+			// 			() => addTimeStamp.value ? MaterialLabFileUtils.GetTimestampSuffix() : "combined");
+			// 	}
+			// 	else
+			// 		Debug.LogWarning("[MetallicGlossTextureCombiner] Combine failed. Ensure both textures are readable (enable Read/Write or click Fix in the channel editors above).");
+			// }
+
+			if (onTwoAssetsSaved != null)
+			{
+				Add(new Button(() =>
+				{
+					var leftTex = leftAdjust?.ProcessedTexture;
+					var rightTex = rightAdjust?.ProcessedTexture;
+					if (leftTex == null || rightTex == null) return;
+					var (metallicAsset, smoothnessAsset) = TextureSaveHelper.SaveAsTwoAssets(
+						pathSource, leftTex, rightTex, createdFiles);
+					if (metallicAsset != null && smoothnessAsset != null)
+						onTwoAssetsSaved(metallicAsset, smoothnessAsset);
+				})
+				{
+					text = "Split to two textures (_metallic, _smoothness)",
+				});
 			}
 		}
 

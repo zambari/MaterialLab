@@ -82,7 +82,12 @@ namespace MaterialLab.Editor
 				var single = selectedTextures[0];
 				if (decodedRgb != null && decodedAlpha != null && decodedSource == single)
 				{
-					// Already decoded: show same editor with RGB + Alpha
+					// Already decoded: show same editor with RGB + Alpha (in-memory pair → "Save as two assets" available)
+					void OnTwoAssetsSaved(Texture2D metallicAsset, Texture2D smoothnessAsset)
+					{
+						Selection.objects = new Object[] { metallicAsset, smoothnessAsset };
+						EditorGUIUtility.PingObject(metallicAsset);
+					}
 					content.Add(new MetallicGlossTextureCombiner(
 						decodedRgb,
 						decodedAlpha,
@@ -92,6 +97,7 @@ namespace MaterialLab.Editor
 						single,
 						createdFiles,
 						OnAssetSaved,
+						OnTwoAssetsSaved,
 						ElementWidth));
 				}
 				else

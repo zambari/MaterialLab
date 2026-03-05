@@ -18,15 +18,18 @@ One-button material creation: select your textures, see roles inferred from file
 
 With MaterialLab you can edit texture assets in place without leaving Unity. Levels, curves, and histogram feedback live in the Texture Edit tab; no external editor required.
 
-![Material Lab: Curves](Docs-Images/materiallab-curves.gif)
 
+
+![Material Lab: Realtime preview](Docs-Images/materiallab-preview-long.gif)
 
 
 Layout: source preview | controls (sliders, invert, curve) + histogram | result preview.
 
  Histogram is built from a low-res proxy so feedback is fast; it updates as you tweak. After “Save in place” or “Save with backup,” the panel keeps using an in-memory copy of the pre-save pixels so your meticulously dialed in curve/slider sweet-spot will still be relevant for tweaks - until you change the selection. 
 
- Surprisingly quite a wide range of transtormations can be acieved with only levels/curves/invert/flip. Back when I was spending time as an After Effects operator, levels and curves combo was often the first (and sometimes the last) effect added to most layers. I used to be obsessed about curves, tested every plugin I could to be better than AE's built in curves. I can highly recommend [Fresh Curves](https://frischluft.com/curves/) if you wanted my recommendation. 
+ Surprisingly quite a wide range of transformations can be achieved with only levels/curves/invert/flip. Back when I was spending time as an After Effects operator, levels and curves combo was often the first (and sometimes the last) effect added to most layers. I used to be obsessed about curves, tested every plugin I could to be better than AE's built in curves. I can highly recommend [Fresh Curves](https://frischluft.com/curves/) if you wanted my recommendation. 
+
+![Material Lab: Curves](Docs-Images/materiallab-curves.gif)
 
  Curve editor in Unity has not been designed specifically for that, but does the job well.
  

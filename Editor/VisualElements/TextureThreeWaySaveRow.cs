@@ -17,6 +17,7 @@ namespace MaterialLab.Editor
 		private readonly IList<string> createdFiles;
 		private readonly Action<Texture2D> onAssetSaved;
 		private readonly int buttonWidth;
+		private readonly string fileOperation;
 
 		private Texture2D sourceTexture;
 		private Func<Texture2D> textureToSaveGetter;
@@ -29,18 +30,24 @@ namespace MaterialLab.Editor
 		public TextureThreeWaySaveRow(
 			IList<string> createdFiles,
 			Action<Texture2D> onAssetSaved = null,
-			int buttonWidth = 150)
+			int buttonWidth = 150,
+			string fileOperation = "Save ")
 		{
 			this.createdFiles = createdFiles;
 			this.onAssetSaved = onAssetSaved;
 			this.buttonWidth = buttonWidth;
+			this.fileOperation = fileOperation ?? "Save ";
 
 			style.flexDirection = FlexDirection.Row;
 			style.marginTop = 4;
 
-			saveAsNewButton = new Button(OnSaveAsNew) { text = "Save as new", style = { width = buttonWidth } };
-			saveWithBackupButton = new Button(OnSaveWithBackup) { text = "Save with backup", style = { width = buttonWidth } };
-			saveInPlaceButton = new Button(OnSaveInPlace) { text = "Save in place", style = { width = buttonWidth } };
+			var op = this.fileOperation.TrimEnd();
+			if (op.Length > 0 && char.IsLower(op[0]))
+				op = char.ToUpper(op[0]) + op.Substring(1);
+
+			saveAsNewButton = new Button(OnSaveAsNew) { text = op + " as new", style = { width = buttonWidth } };
+			saveWithBackupButton = new Button(OnSaveWithBackup) { text = op + " with backup", style = { width = buttonWidth } };
+			saveInPlaceButton = new Button(OnSaveInPlace) { text = op + " in place", style = { width = buttonWidth } };
 
 			Add(saveAsNewButton);
 			Add(saveWithBackupButton);
