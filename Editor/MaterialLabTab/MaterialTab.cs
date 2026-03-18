@@ -11,7 +11,7 @@ namespace MaterialLab.Editor
 	using UnityEngine;
 	using UnityEngine.UIElements;
 
-	public class MaterialTab : MaterialLabTab
+	public class MaterialTab : BaseLabTab
 	{
 		private readonly VisualElement content;
 
@@ -39,18 +39,20 @@ namespace MaterialLab.Editor
 			var selectedTextures = Selection.objects.OfType<Texture2D>().ToArray();
 			var selectedMaterials = Selection.objects.OfType<Material>().ToArray();
 			var renderersFromSelection = Selection.objects
-				.OfType<GameObject>()
-				.SelectMany(go => go.GetComponents<Renderer>())
-				.Where(r => r != null)
-				.ToArray();
+												  .OfType<GameObject>()
+												  .SelectMany(go => go.GetComponents<Renderer>())
+												  .Where(r => r != null)
+												  .ToArray();
 
-			bool hasRenderersWithMaterials = renderersFromSelection.Any(r => r.sharedMaterials != null && r.sharedMaterials.Length > 0);
+			bool hasRenderersWithMaterials =
+				renderersFromSelection.Any(r => r.sharedMaterials != null && r.sharedMaterials.Length > 0);
 			bool hasAnything = selectedTextures.Length > 0 || selectedMaterials.Length > 0 || hasRenderersWithMaterials;
 
 			if (!hasAnything)
 			{
 				content.Add(
-					new LabelInfo("Select textures, a material, or a GameObject with a Renderer\nto create or inspect materials."));
+					new LabelInfo(
+						"Select textures, a material, or a GameObject with a Renderer\nto create or inspect materials."));
 				return;
 			}
 
@@ -67,37 +69,15 @@ namespace MaterialLab.Editor
 				texturesSection.Add(new MaterialFromTexturesPreviewElement(matcher));
 				texturesSection.Add(new Separator());
 
-				var nameFromMainTextureToggle = new Toggle("Name from main texture") { value = true };
-
-				var defaultName = GetDefaultMaterialName(matcher, selectedTextures);
-				var nameField = new TextField("Material name")
-				{
-					value = nameFromMainTextureToggle.value ? defaultName : "Material",
-					style = { marginBottom = 10, marginTop = 10 }
-				};
-				texturesSection.Add(nameField);
-
-				nameFromMainTextureToggle.RegisterValueChangedCallback(evt =>
-																	   {
-																		   nameField.value =
-																			   evt.newValue
-																				   ? GetDefaultMaterialName(
-																					   matcher,
-																					   selectedTextures)
-																				   : "Material";
-																	   });
-
 				var addTimestampToggle = new Toggle("Add Timestamp") { value = true };
 				texturesSection.Add(addTimestampToggle);
-				texturesSection.Add(nameFromMainTextureToggle);
 
 				var createButton = new Button(() =>
 											  {
-												  CreateMaterialFromMatcher(
+												  var mat = CreateMaterialFromMatcher(
 													  matcher,
-													  selectedTextures,
-													  nameField.value,
 													  addTimestampToggle.value);
+												  if (mat != null) Selection.activeObject = mat;
 											  }) { text = "Create new material" };
 				texturesSection.Add(createButton);
 
@@ -162,7 +142,10 @@ namespace MaterialLab.Editor
 
 						var matBlock = new VisualElement { style = { marginTop = 6 } };
 						matBlock.Add(new Label(materials.Length > 1 ? $"Material {i}" : "Material"));
-						var materialField = new ObjectField { label = "Material", value = mat, objectType = typeof(Material) };
+						var materialField = new ObjectField
+						{
+							label = "Material", value = mat, objectType = typeof(Material)
+						};
 						materialField.SetEnabled(false);
 						matBlock.Add(materialField);
 						var matMatcher = new TextureAssetMatcher(mat);
@@ -176,13 +159,11 @@ namespace MaterialLab.Editor
 			}
 		}
 
-		private void CreateMaterialFromMatcher(
+		public static Material CreateMaterialFromMatcher(
 			TextureAssetMatcher matcher,
-			Texture2D[] selectedTextures,
-			string materialName,
 			bool addTimestamp)
 		{
-			var primaryTexture = matcher.Albedo ?? matcher.Main ?? selectedTextures.FirstOrDefault();
+			var primaryTexture = matcher.Albedo ?? matcher.Main;
 
 			var primaryPath = primaryTexture != null
 				? AssetDatabase.GetAssetPath(primaryTexture)
@@ -193,7 +174,7 @@ namespace MaterialLab.Editor
 			var dir = Directory.Exists(primaryPath) ? primaryPath : Path.GetDirectoryName(primaryPath);
 			if (string.IsNullOrEmpty(dir)) dir = "Assets";
 
-			var baseName = string.IsNullOrWhiteSpace(materialName) ? "Material" : MakeSafeFileName(materialName);
+			var baseName = MakeSafeFileName(matcher.SuggestedMaterialName);
 			var safeName = addTimestamp
 				? baseName + "_" + MaterialLabFileUtils.GetTimestampSuffix()
 				: baseName;
@@ -220,6 +201,8 @@ namespace MaterialLab.Editor
 			AssignTextureIfHasProperty(material, "_BaseMap", matcher.Albedo ?? matcher.Main);
 			AssignTextureIfHasProperty(material, "_MetallicGlossMap", matcher.Metallic);
 			AssignTextureIfHasProperty(material, "_MetallicMap", matcher.Metallic);
+
+			EnsureTextureIsImportedAsNormalMap(matcher.Normal);
 			AssignTextureIfHasProperty(material, "_BumpMap", matcher.Normal);
 			AssignTextureIfHasProperty(material, "_ParallaxMap", matcher.Height);
 			AssignTextureIfHasProperty(material, "_OcclusionMap", matcher.Occlusion);
@@ -238,7 +221,7 @@ namespace MaterialLab.Editor
 			AssetDatabase.Refresh();
 
 			EditorGUIUtility.PingObject(material);
-			Selection.activeObject = material;
+			return material;
 		}
 
 		private static void AssignTextureIfHasProperty(Material material, string propertyName, Texture2D texture)
@@ -249,15 +232,18 @@ namespace MaterialLab.Editor
 			material.SetTexture(propertyName, texture);
 		}
 
-		private static string GetDefaultMaterialName(TextureAssetMatcher matcher, Texture2D[] selectedTextures)
+		private static void EnsureTextureIsImportedAsNormalMap(Texture2D texture)
 		{
-			var main = matcher.Albedo ?? matcher.Main ?? selectedTextures.FirstOrDefault();
-			if (main == null) return "Material";
+			if (texture == null) return;
 
-			var path = AssetDatabase.GetAssetPath(main);
-			if (string.IsNullOrEmpty(path)) return "Material";
+			var path = AssetDatabase.GetAssetPath(texture);
+			if (string.IsNullOrEmpty(path)) return;
 
-			return Path.GetFileNameWithoutExtension(path);
+			if (AssetImporter.GetAtPath(path) is not TextureImporter importer) return;
+			if (importer.textureType == TextureImporterType.NormalMap) return;
+
+			importer.textureType = TextureImporterType.NormalMap;
+			importer.SaveAndReimport();
 		}
 
 		private static string MakeSafeFileName(string name)

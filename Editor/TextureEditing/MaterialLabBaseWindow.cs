@@ -1,4 +1,4 @@
-﻿namespace MaterialLab.Editor
+namespace MaterialLab.Editor
 {
 	using UnityEditor;
 
@@ -6,8 +6,6 @@
 
 	public class MaterialLabBaseWindow: EditorWindow
 	{
-		internal const string MenuPathBase = "Tools/MaterialLab/";
-
 		internal Label HeaderLabel(string text)
 		{
 			var label = new Label(text);

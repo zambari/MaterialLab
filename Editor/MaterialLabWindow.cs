@@ -1,4 +1,4 @@
-﻿namespace MaterialLab.Editor
+namespace MaterialLab.Editor
 {
 	using System;
 
@@ -12,7 +12,7 @@
 
 	public class MaterialLabWindow : MaterialLabBaseWindow
 	{
-		[MenuItem(MenuPathBase + "Material Lab", false)]
+		[MenuItem(MaterialLabMenu.MenuPathBase + "Material Lab", false)]
 		private static void OpenWindow()
 		{
 			var inspectorType = Type.GetType("UnityEditor.InspectorWindow,UnityEditor.dll");

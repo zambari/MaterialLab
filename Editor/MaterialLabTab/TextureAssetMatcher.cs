@@ -2,7 +2,10 @@ namespace MaterialLab.Editor
 {
 	using System;
 	using System.Collections.Generic;
+	using System.IO;
 	using System.Linq;
+
+	using UnityEditor;
 
 	using UnityEngine;
 
@@ -31,6 +34,24 @@ namespace MaterialLab.Editor
 		public Texture2D Occlusion { get; }
 
 		public Texture2D Emission { get; }
+
+		public string SuggestedMaterialName
+		{
+			get
+			{
+				var primary = Albedo ?? Main;
+				if (primary == null) return "Material";
+
+				var path = AssetDatabase.GetAssetPath(primary);
+				if (!string.IsNullOrWhiteSpace(path))
+				{
+					var file = Path.GetFileNameWithoutExtension(path);
+					if (!string.IsNullOrWhiteSpace(file)) return file;
+				}
+
+				return string.IsNullOrWhiteSpace(primary.name) ? "Material" : primary.name;
+			}
+		}
 
 		/// <summary>
 		/// Builds a matcher from a set of loose textures, using filename heuristics

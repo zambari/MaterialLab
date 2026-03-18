@@ -11,7 +11,7 @@ namespace MaterialLab.Editor
 	using UnityEngine;
 	using UnityEngine.UIElements;
 
-	public class TextureCombinerTab : MaterialLabTab
+	public class TextureCombinerTab : BaseLabTab
 	{
 		private const int ElementWidth = 150;
 

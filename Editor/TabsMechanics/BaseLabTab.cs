@@ -11,13 +11,13 @@
 	/// Adds 'lock selection' toggle, and virtual OnSelectionChanged method which is connected to editor events when tab
 	/// is entered, and disconnected when we leave.
 	/// </summary>
-	public abstract class MaterialLabTab : BaseTab
+	public abstract class BaseLabTab : BaseTab
 	{
 		private FlickToggle lockSelectionToggle;
 
 		protected bool isSelectionLocked => lockSelectionToggle.Value;
 
-		public MaterialLabTab(string name) : base()
+		public BaseLabTab(string name) : base()
 		{
 			this.Add(GetHeader(name));
 			lockSelectionToggle = new FlickToggle("SelectionLock", false, "SelectionLock" + GetType().Name);

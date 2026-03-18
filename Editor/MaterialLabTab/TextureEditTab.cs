@@ -10,7 +10,7 @@ namespace MaterialLab.Editor
 	using UnityEngine;
 	using UnityEngine.UIElements;
 
-	public class TextureEditTab : MaterialLabTab
+	public class TextureEditTab : BaseLabTab
 	{
 		private readonly VisualElement content;
 
