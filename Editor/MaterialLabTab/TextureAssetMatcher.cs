@@ -110,18 +110,12 @@ namespace MaterialLab.Editor
 												 "metallic",
 												 "metalness",
 												 "metalness",
-												 "metal",
-												 "_m",
-												 "-m",
-												 " mt",
-												 "mtl"));
+												 "metal"));
 
 			var roughness = FindAndRemove(
 				n =>
 					n.Contains("roughness") ||
-					n.Contains("rough") ||
-					n.EndsWith("_r") ||
-					n.EndsWith("-r"));
+					n.Contains("rough"));
 
 			// Smoothness: native smoothness names OR gloss-style names.
 			var smoothness = FindAndRemove(
@@ -129,8 +123,6 @@ namespace MaterialLab.Editor
 					n.Contains("smoothness") ||
 					n.Contains("smooth") ||
 					n.Contains("smo") ||
-					n.EndsWith("_s") ||
-					n.EndsWith("-s") ||
 					n.Contains("glossiness") ||
 					n.Contains("gloss") ||
 					n.Contains("gls"));
@@ -148,9 +140,7 @@ namespace MaterialLab.Editor
 									  n,
 									  "normal",
 									  "norm",
-									  "_nrm",
-									  "_n",
-									  "-n"));
+									  "_nrm"));
 
 			var height = FindAndRemove(n =>
 								  ContainsAny(
@@ -183,7 +173,6 @@ namespace MaterialLab.Editor
 									   "emiss",
 									   "emit",
 									   "glow",
-									   "_e",
 									   "_em",
 									   "selfillum"));
 
@@ -195,12 +184,7 @@ namespace MaterialLab.Editor
 									  "base_color",
 									  "base-color",
 									  "base color",
-									  "diffuse",
-									  "diff",
-									  "_d",
-									  "-d",
-									  " col",
-									  "color"));
+									  "diffuse"));
 
 			// Fallback: pick something that isn't obviously a non-color data map.
 			var main = albedo
@@ -216,7 +200,7 @@ namespace MaterialLab.Editor
 									  t != height &&
 									  t != occlusion &&
 									  t != emission &&
-									  !ContainsAny(n, "normal", "nrm", "_n", "height", "bump", "ao", "occlusion");
+									  !ContainsAny(n, "normal", "nrm", "height", "bump", "ao", "occlusion");
 						   })
 					   ?? list.FirstOrDefault();
 

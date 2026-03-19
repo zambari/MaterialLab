@@ -230,7 +230,7 @@ namespace MaterialLab.Editor
 
 		private static Material TryCreateMaterialFromUnpackedTextures(string rootDirFullPath)
 		{
-			const bool k_Verbose = true;
+			const bool k_Verbose = false;
 
 			static void Log(string msg)
 			{
