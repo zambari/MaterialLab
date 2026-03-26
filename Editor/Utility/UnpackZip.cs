@@ -210,6 +210,8 @@ namespace MaterialLab.Editor
 					ExtractFbxAssetsUnder(rootDir);
 				}
 
+				ForceTextureImportsToDefault(rootDir);
+
 				Debug.Log($"UnpackZip: Finished unpacking {assetPath} into {rootDir}.");
 
 				// Remove the zip both from disk and from the AssetDatabase.
@@ -524,6 +526,58 @@ namespace MaterialLab.Editor
 			if (mat.name == modelName) return;
 
 			AssetDatabase.RenameAsset(matPath, modelName);
+		}
+
+		private static void ForceTextureImportsToDefault(string rootDirFullPath)
+		{
+			if (string.IsNullOrEmpty(rootDirFullPath) || !Directory.Exists(rootDirFullPath))
+			{
+				return;
+			}
+
+			var projectRoot = Path.GetDirectoryName(Application.dataPath);
+			if (string.IsNullOrEmpty(projectRoot))
+			{
+				return;
+			}
+
+			string folderAssetPath;
+			try
+			{
+				folderAssetPath = Path.GetRelativePath(projectRoot, rootDirFullPath).Replace("\\", "/");
+			}
+			catch
+			{
+				return;
+			}
+
+			if (string.IsNullOrEmpty(folderAssetPath) || !folderAssetPath.StartsWith("Assets/"))
+			{
+				return;
+			}
+
+			var textureGuids = AssetDatabase.FindAssets("t:Texture2D", new[] { folderAssetPath });
+			for (int i = 0; i < textureGuids.Length; i++)
+			{
+				var texturePath = AssetDatabase.GUIDToAssetPath(textureGuids[i]);
+				if (string.IsNullOrEmpty(texturePath))
+				{
+					continue;
+				}
+
+				if (AssetImporter.GetAtPath(texturePath) is not TextureImporter textureImporter)
+				{
+					continue;
+				}
+
+				if (textureImporter.textureType == TextureImporterType.Default)
+				{
+					continue;
+				}
+
+				textureImporter.textureType = TextureImporterType.Default;
+				textureImporter.SaveAndReimport();
+			}
 		}
 
 		private static string SanitizeName(string name)
