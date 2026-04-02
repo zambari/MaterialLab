@@ -74,6 +74,12 @@ namespace MaterialLab.Editor
 			return null;
 		}
 
+		private static bool IsSupportedExtension(string ext)
+		{
+			return string.Equals(ext, ".fbx", StringComparison.OrdinalIgnoreCase) ||
+			       string.Equals(ext, ".dae", StringComparison.OrdinalIgnoreCase);
+		}
+
 		private static bool TryGetSelectedFbxAssetPath(out string assetPath)
 		{
 			assetPath = null;
@@ -89,34 +95,40 @@ namespace MaterialLab.Editor
 				return false;
 			}
 
-			// Direct FBX asset selection.
+			// Direct FBX/DAE asset selection.
 			var directPath = AssetDatabase.GetAssetPath(obj);
-			if (!string.IsNullOrEmpty(directPath) &&
-			    string.Equals(Path.GetExtension(directPath), ".fbx", StringComparison.OrdinalIgnoreCase))
+			if (!string.IsNullOrEmpty(directPath) && IsSupportedExtension(Path.GetExtension(directPath)))
 			{
 				assetPath = directPath;
 				return true;
 			}
 
-			// GameObject with MeshRenderer where the Mesh comes from an FBX asset.
-			if (obj is GameObject go)
+		// GameObject with MeshRenderer or SkinnedMeshRenderer where the Mesh comes from an FBX/DAE asset.
+		if (obj is GameObject go)
+		{
+			Mesh mesh = null;
+
+			var meshFilter = go.GetComponent<MeshFilter>();
+			if (meshFilter != null && go.GetComponent<MeshRenderer>() != null)
+				mesh = meshFilter.sharedMesh;
+
+			if (mesh == null)
 			{
-				var meshRenderer = go.GetComponent<MeshRenderer>();
-				if (meshRenderer != null)
+				var skinned = go.GetComponent<SkinnedMeshRenderer>();
+				if (skinned != null)
+					mesh = skinned.sharedMesh;
+			}
+
+			if (mesh != null)
+			{
+				var meshPath = AssetDatabase.GetAssetPath(mesh);
+				if (!string.IsNullOrEmpty(meshPath) && IsSupportedExtension(Path.GetExtension(meshPath)))
 				{
-					var meshFilter = go.GetComponent<MeshFilter>();
-					if (meshFilter != null && meshFilter.sharedMesh != null)
-					{
-						var meshPath = AssetDatabase.GetAssetPath(meshFilter.sharedMesh);
-						if (!string.IsNullOrEmpty(meshPath) &&
-						    string.Equals(Path.GetExtension(meshPath), ".fbx", StringComparison.OrdinalIgnoreCase))
-						{
-							assetPath = meshPath;
-							return true;
-						}
-					}
+					assetPath = meshPath;
+					return true;
 				}
 			}
+		}
 
 			return false;
 		}
@@ -170,10 +182,14 @@ namespace MaterialLab.Editor
 			// Use forward slashes for Blender/ Python path handling.
 			var fbxPathForPython = fbxFullPath.Replace("\\", "/");
 
-			// Inline Python: wipe default scene content, then import the selected FBX.
+			// Inline Python: wipe default scene content, then import the selected asset.
 			// Use a raw Python string with single quotes to avoid escaping issues.
+			var ext = Path.GetExtension(assetPath);
+			var importCall = string.Equals(ext, ".dae", StringComparison.OrdinalIgnoreCase)
+				? $"bpy.ops.wm.collada_import(filepath=r'{fbxPathForPython}')"
+				: $"bpy.ops.import_scene.fbx(filepath=r'{fbxPathForPython}')";
 			var pythonExpr =
-				$"import bpy; bpy.context.scene['fbx_roundtrip_source_path']=r'{fbxPathForPython}'; bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(); bpy.ops.import_scene.fbx(filepath=r'{fbxPathForPython}')";
+				$"import bpy; bpy.context.scene['fbx_roundtrip_source_path']=r'{fbxPathForPython}'; bpy.ops.object.select_all(action='SELECT'); bpy.ops.object.delete(); {importCall}";
 
 			// Run with full UI (no --background) so the imported scene stays open for editing.
 			var arguments = $"--python-expr \"{pythonExpr}\""; //--factory-startup 
@@ -266,14 +282,16 @@ namespace MaterialLab.Editor
 				return;
 			}
 
-			var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-			if (string.IsNullOrEmpty(appData))
-			{
-				UnityEngine.Debug.LogError("PushToBlender: Could not resolve %APPDATA% when updating FBX tools script.");
-				return;
-			}
+		var scriptVersion = BumpAndReadVersion(sourceFullPath);
 
-			int copiedCount = 0;
+		var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+		if (string.IsNullOrEmpty(appData))
+		{
+			UnityEngine.Debug.LogError("PushToBlender: Could not resolve %APPDATA% when updating FBX tools script.");
+			return;
+		}
+
+		int copiedCount = 0;
 			for (int i = 0; i < BlenderVersions.Length; i++)
 			{
 				var version = BlenderVersions[i];
@@ -291,8 +309,8 @@ namespace MaterialLab.Editor
 					File.Copy(sourceFullPath, targetPath, true);
 					copiedCount++;
 
-					UnityEngine.Debug.Log(
-						$"PushToBlender: Updated FBX tools script for Blender {version}.\nFrom: {sourceFullPath}\nTo:   {targetPath}");
+				UnityEngine.Debug.Log(
+					$"PushToBlender: Updated FBX tools script{scriptVersion} for Blender {version}.\nFrom: {sourceFullPath}\nTo:   {targetPath}");
 				}
 				catch (Exception ex)
 				{
@@ -301,12 +319,48 @@ namespace MaterialLab.Editor
 				}
 			}
 
-			if (copiedCount == 0)
-			{
-				UnityEngine.Debug.LogWarning(
-					"PushToBlender: FBX tools script was not copied to any Blender add-ons directory. " +
-					"Ensure at least one supported Blender version is installed for the current user.");
-			}
+		if (copiedCount == 0)
+		{
+			UnityEngine.Debug.LogWarning(
+				"PushToBlender: FBX tools script was not copied to any Blender add-ons directory. " +
+				"Ensure at least one supported Blender version is installed for the current user.");
 		}
 	}
+
+	// Increments the patch (3rd) component of the bl_info "version" tuple in-place,
+	// writes the file back, and returns " v1.7.1" (with leading space) for embedding in a log message.
+	// Returns "" if the version line cannot be found or parsed.
+	private static string BumpAndReadVersion(string pyPath)
+	{
+		var lines = File.ReadAllLines(pyPath);
+		for (int i = 0; i < lines.Length; i++)
+		{
+			var trimmed = lines[i].Trim();
+			if (!trimmed.StartsWith("\"version\"")) continue;
+
+			var parenOpen = trimmed.IndexOf('(');
+			var parenClose = trimmed.IndexOf(')');
+			if (parenOpen < 0 || parenClose <= parenOpen) break;
+
+			var parts = trimmed
+				.Substring(parenOpen + 1, parenClose - parenOpen - 1)
+				.Split(',');
+
+			// Parse whatever is there; pad to 3 components.
+			var nums = new int[3];
+			for (int j = 0; j < parts.Length && j < 3; j++)
+				int.TryParse(parts[j].Trim(), out nums[j]);
+
+			nums[2]++;
+
+			var newTuple = $"({nums[0]}, {nums[1]}, {nums[2]})";
+			// Preserve original indentation — replace only the tuple portion.
+			lines[i] = lines[i].Substring(0, lines[i].IndexOf('(')) + newTuple + ",";
+			File.WriteAllLines(pyPath, lines);
+
+			return $" v{nums[0]}.{nums[1]}.{nums[2]}";
+		}
+		return "";
+	}
+}
 }

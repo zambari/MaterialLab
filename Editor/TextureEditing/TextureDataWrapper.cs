@@ -7,7 +7,11 @@ namespace MaterialLab.Editor
 	public enum HistogramValueType
 	{
 		AverageRgb,
-		Alpha
+		Red,
+		Green,
+		Blue,
+		Alpha,
+		Luminance
 	}
 
 	/// <summary>
@@ -147,9 +151,7 @@ namespace MaterialLab.Editor
 
 			for (int i = 0; i < previewColors.Length; i++)
 			{
-				float value = valueType == HistogramValueType.Alpha
-					? previewColors[i].a
-					: (previewColors[i].r + previewColors[i].g + previewColors[i].b) / 3f;
+				float value = GetHistogramValue(previewColors[i], valueType);
 				value = Mathf.Clamp01(value);
 				int bucket = Mathf.Min(bucketSize - 1, Mathf.FloorToInt(value * bucketSize));
 				counts[bucket]++;
@@ -209,6 +211,12 @@ namespace MaterialLab.Editor
 
 			histogramTexture.SetPixels(pixels);
 			histogramTexture.Apply();
+		}
+
+		public void RepaintHistogram(HistogramValueType valueType)
+		{
+			histogramValueType = valueType;
+			RepaintHistogram();
 		}
 
 		private Texture2D CreateHistogramTexture()
@@ -320,6 +328,19 @@ namespace MaterialLab.Editor
 			}
 
 			return 0;
+		}
+
+		private static float GetHistogramValue(Color c, HistogramValueType valueType)
+		{
+			switch (valueType)
+			{
+				case HistogramValueType.Red: return c.r;
+				case HistogramValueType.Green: return c.g;
+				case HistogramValueType.Blue: return c.b;
+				case HistogramValueType.Alpha: return c.a;
+				case HistogramValueType.Luminance: return 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+				default: return (c.r + c.g + c.b) / 3f;
+			}
 		}
 	}
 }
