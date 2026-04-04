@@ -14,6 +14,7 @@ namespace MaterialLab.Editor
 	public class TextureCombinerTab : BaseLabTab
 	{
 		private const int ElementWidth = 150;
+		private static readonly string[] MetallicTexturePropertyNames = { "_MetallicGlossMap", "_MetallicMap" };
 
 		private readonly VisualElement content;
 		private readonly Label recognizedRolesLabel;
@@ -120,12 +121,90 @@ namespace MaterialLab.Editor
 			if (selectedTextures.Length == 2 || selectedTextures.Length == 3)
 			{
 				// Two or three textures: show combiner with assignment from matcher
-				content.Add(new MetallicGlossTextureCombiner(matcher, createdFiles, OnAssetSaved, ElementWidth));
+				var autoApplyTarget = TryFindAutoApplyTarget(selectedTextures);
+				Toggle autoApplyToggle = null;
+				if (autoApplyTarget.HasValue)
+				{
+					autoApplyToggle = new Toggle("Auto apply to material")
+					{
+						value = true,
+						tooltip = $"Apply the combined texture to {autoApplyTarget.Value.material.name} after saving."
+					};
+					content.Add(autoApplyToggle);
+				}
+
+				void OnCombinedTextureSaved(Texture2D savedAsset)
+				{
+					if (autoApplyToggle?.value == true && autoApplyTarget.HasValue)
+					{
+						ApplyTextureToMaterial(autoApplyTarget.Value.material, autoApplyTarget.Value.texturePropertyName, savedAsset);
+						return;
+					}
+
+					OnAssetSaved(savedAsset);
+				}
+
+				content.Add(new MetallicGlossTextureCombiner(matcher, createdFiles, OnCombinedTextureSaved, ElementWidth));
 			}
 			else
 			{
 				content.Add(new Label("Select 1 texture to decode, or 2–3 textures to combine."));
 			}
+		}
+
+		private static (Material material, string texturePropertyName)? TryFindAutoApplyTarget(Texture2D[] selectedTextures)
+		{
+			if (selectedTextures == null || selectedTextures.Length < 2) return null;
+
+			var texturePaths = selectedTextures
+							   .Select(AssetDatabase.GetAssetPath)
+							   .Where(path => !string.IsNullOrEmpty(path))
+							   .ToArray();
+			if (texturePaths.Length != selectedTextures.Length) return null;
+
+			var folderPath = GetFolderPath(texturePaths[0]);
+			if (string.IsNullOrEmpty(folderPath)) return null;
+			if (texturePaths.Any(path => !string.Equals(GetFolderPath(path), folderPath, System.StringComparison.OrdinalIgnoreCase)))
+				return null;
+
+			var materialPaths = AssetDatabase.FindAssets("t:Material", new[] { folderPath })
+										   .Select(AssetDatabase.GUIDToAssetPath)
+										   .Where(path => string.Equals(GetFolderPath(path), folderPath, System.StringComparison.OrdinalIgnoreCase))
+										   .Distinct()
+										   .ToArray();
+			if (materialPaths.Length != 1) return null;
+
+			var material = AssetDatabase.LoadAssetAtPath<Material>(materialPaths[0]);
+			if (material == null) return null;
+
+			foreach (var propertyName in MetallicTexturePropertyNames)
+			{
+				if (!material.HasProperty(propertyName)) continue;
+
+				var assignedTexture = material.GetTexture(propertyName) as Texture2D;
+				if (assignedTexture != null && selectedTextures.Contains(assignedTexture))
+					return (material, propertyName);
+			}
+
+			return null;
+		}
+
+		private static string GetFolderPath(string assetPath)
+		{
+			return string.IsNullOrEmpty(assetPath)
+				? null
+				: Path.GetDirectoryName(assetPath)?.Replace('\\', '/');
+		}
+
+		private static void ApplyTextureToMaterial(Material material, string texturePropertyName, Texture2D combinedTexture)
+		{
+			if (material == null || combinedTexture == null || string.IsNullOrEmpty(texturePropertyName)) return;
+			if (!material.HasProperty(texturePropertyName)) return;
+			if (material.GetTexture(texturePropertyName) == combinedTexture) return;
+
+			Undo.RecordObject(material, "Auto Apply Combined Texture");
+			material.SetTexture(texturePropertyName, combinedTexture);
+			EditorUtility.SetDirty(material);
 		}
 
 		private void DecodeToRgbAlpha(Texture2D source)
